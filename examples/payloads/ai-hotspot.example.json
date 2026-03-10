@@ -1,0 +1,34 @@
+{
+  "title": "AI 热点扫描",
+  "summary": "本轮发现 3 个值得继续跟进的候选选题。",
+  "items": [
+    {
+      "emoji": "🚨",
+      "title": "OpenAI 新模型迭代",
+      "score": "SCORE 23/25",
+      "description": "来自多平台交叉验证的高热度更新，适合扩展为解读型内容。",
+      "platform": "即刻 / 微信"
+    },
+    {
+      "emoji": "🛠",
+      "title": "Agent 工具链升级",
+      "score": "SCORE 21/25",
+      "description": "偏工作流建设，适合做实操向内容。",
+      "platform": "即刻"
+    }
+  ],
+  "timestamp": "2026-03-10 14:45",
+  "archive_target_path": "/workspace-blogger/content/topic-backlog.md",
+  "thread_summary": {
+    "notice": "AI 热点扫描已完成",
+    "bullets": [
+      "新增高分选题：2 个",
+      "最高优先级：OpenAI 新模型迭代",
+      "详情见上一条完整卡片"
+    ],
+    "footer": "详情见上一条完整卡片。",
+    "mention_open_ids": [
+      "ou_your_open_id_here"
+    ]
+  }
+}

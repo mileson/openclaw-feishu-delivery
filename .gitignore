@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Local env
+.env
+
+# Local runtime data
+state/*.json
+logs/*.jsonl
+
+# System
+.DS_Store

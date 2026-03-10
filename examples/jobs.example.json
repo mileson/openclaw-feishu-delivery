@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "blogger-ai-hotspot-hourly",
+      "agentId": "blogger",
+      "name": "AI 热点扫描（每2小时）",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 */2 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "payload": {
+        "kind": "agentTurn",
+        "message": "采集 AI 热点并调用 send_message.py 发送 ai-hotspot 模板。"
+      }
+    },
+    {
+      "id": "main-daily-diary",
+      "agentId": "main",
+      "name": "每日日记汇总",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "30 23 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "payload": {
+        "kind": "agentTurn",
+        "message": "汇总当日日记并调用 send_message.py 发送 daily-diary 模板。"
+      }
+    },
+    {
+      "id": "feishu-retry-worker",
+      "agentId": "main",
+      "name": "飞书失败补发队列处理（每5分钟）",
+      "enabled": true,
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/5 * * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "payload": {
+        "kind": "systemEvent",
+        "text": "执行 python3 scripts/send_message.py --mode retry-pending --retry-limit 20"
+      }
+    }
+  ]
+}

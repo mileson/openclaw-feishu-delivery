@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openclaw-feishu-cron-kit"
+version = "0.1.0"
+description = "Feishu fixed-thread delivery, cron templating, and retry queue for OpenClaw-style agents."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Mileson" }
+]
+dependencies = [
+  "requests>=2.31.0"
+]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

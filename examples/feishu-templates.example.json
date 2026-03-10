@@ -1,0 +1,64 @@
+{
+  "templates": {
+    "ai-hotspot": {
+      "description": "AI 热点扫描",
+      "header_template": "blue",
+      "required_fields": ["title", "summary", "items", "timestamp", "thread_summary"],
+      "route": {
+        "target": {
+          "id": "oc_your_chat_id_here",
+          "type": "chat_id"
+        },
+        "delivery": {
+          "channel": "topic"
+        },
+        "policy": {
+          "lock_target": true,
+          "lock_delivery": true
+        },
+        "thread": {
+          "enabled": true,
+          "binding_key_template": "blogger:ai-hotspot",
+          "title_template": "【AI 热点扫描】",
+          "recreate_on_root_missing": true,
+          "summary_reply": {
+            "enabled": true,
+            "required": true,
+            "channel": "post",
+            "mention_open_ids": ["ou_your_open_id_here"]
+          }
+        }
+      }
+    },
+    "daily-diary": {
+      "description": "每日日记汇总",
+      "header_template": "turquoise",
+      "required_fields": ["title", "summary", "sections", "timestamp", "thread_summary"],
+      "route": {
+        "target": {
+          "id": "oc_your_chat_id_here",
+          "type": "chat_id"
+        },
+        "delivery": {
+          "channel": "topic"
+        },
+        "policy": {
+          "lock_target": true,
+          "lock_delivery": true
+        },
+        "thread": {
+          "enabled": true,
+          "binding_key_template": "main:daily-diary",
+          "title_template": "【每日日记汇总】",
+          "recreate_on_root_missing": true,
+          "summary_reply": {
+            "enabled": true,
+            "required": true,
+            "channel": "post",
+            "mention_open_ids": ["ou_your_open_id_here"]
+          }
+        }
+      }
+    }
+  }
+}
