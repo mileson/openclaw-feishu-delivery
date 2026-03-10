@@ -155,32 +155,18 @@ cron / agent
 
 ## 如果希望让“小龙虾 OpenClaw”安装这套工具，提示词如下
 
-最简单的用法，不是让用户自己研究仓库结构，而是直接把下面这一整段提示词发给“小龙虾 OpenClaw”，让它按步骤完成理解、安装、接线和验证。
-
-```ascii
-使用方式
-────────────────────────────────
-用户给小龙虾一句任务
-  -> 小龙虾先读这个仓库
-  -> 再按当前 OpenClaw 环境安装
-  -> 再替用户接好模板 / job / 重试
-  -> 最后发一条测试消息验证
-```
-
-建议让它重点阅读这些文件：
-
-```ascii
-优先阅读文件
-────────────────────────────────
-README.md
-examples/feishu-templates.example.json
-examples/jobs.example.json
-examples/accounts.example.json
-examples/payloads/
-```
-
 ```text
-请阅读 https://github.com/mileson/openclaw-feishu-delivery ，重点阅读 README、examples/feishu-templates.example.json、examples/jobs.example.json、examples/accounts.example.json 以及 examples/payloads/ 下的示例。先总结这套飞书固定话题、模板发送和失败补发机制，重点说明：模板如何决定 route、job_id 与 binding_key 如何决定固定话题、完整卡片与摘要 reply 如何分层、失败补发如何工作、以及多 agent 下为什么不能直接复用同一个 open_id。然后把 openclaw-feishu-delivery 安装到当前 OpenClaw 服务器，要求 clone 到 /root/.openclaw/vendor/openclaw-feishu-delivery，创建虚拟环境并安装依赖，从 examples 复制出 config/feishu-templates.json、config/jobs.json、config/accounts.json，但不要覆盖现有生产配置文件，先生成候选配置。接着按我们当前 OpenClaw 的生产任务做接线，识别哪些 agent 需要接入这套飞书投递底座，并为每个 agent 生成对应的 templates / jobs / accounts 映射草案；对每条任务都说明发到哪个群、是否固定话题、话题标题是什么、摘要是否 @ 人、是否启用失败补发。最后请抽查 1 条定时任务和 1 条日常对话消息链路，验证是否能正确发到固定话题、是否会自动补摘要 reply、失败补发队列是否可运行；如果发现问题，请按“配置错误 / job_id 错误 / open_id 作用域错误 / 补发未接入”分类输出，并给我一份可执行的修复建议。整个过程中先输出理解总结、安装结果、差异清单和待确认配置表，不要直接覆盖旧配置，也不要直接启用生产定时任务，等我确认后再执行。
+请将下面这段提示词发送给你的小龙虾 OpenClaw，它将自动学习这套工具、完成安装部署、按当前系统里的 agent 设计模板与配置，并在验证通过后再向你汇报结果。
+
+请阅读 https://github.com/mileson/openclaw-feishu-delivery ，重点阅读 README、examples/feishu-templates.example.json、examples/jobs.example.json、examples/accounts.example.json 以及 examples/payloads/ 下的示例。先总结这套飞书固定话题、模板发送和失败补发机制，重点说明：模板如何决定 route、job_id 与 binding_key 如何决定固定话题、完整卡片与摘要 reply 如何分层、失败补发如何工作、以及多 agent 下为什么不能直接复用同一个 open_id。
+
+然后请检查当前 OpenClaw 系统里一共有多少个 agent，它们分别是谁、各自负责什么业务、哪些 agent 需要接入这套飞书投递底座。基于当前实际 agent 情况，先生成一份按 agent 维度划分的接线草案，说明每个 agent 适合使用哪些模板、发到哪个群、是否固定话题、话题标题是什么、摘要是否需要 @ 人、是否启用失败补发。
+
+接着把 openclaw-feishu-delivery 安装到当前 OpenClaw 服务器，要求 clone 到 /root/.openclaw/vendor/openclaw-feishu-delivery，创建虚拟环境并安装依赖，从 examples 复制出 config/feishu-templates.json、config/jobs.json、config/accounts.json，但不要覆盖现有生产配置文件，先生成候选配置。然后基于当前系统中的 agent 和业务任务，为每个需要接入的 agent 生成对应的 templates / jobs / accounts 映射草案与差异清单。
+
+完成接线草案后，请尝试做发送验证：至少抽查 1 条定时任务链路和 1 条日常对话消息链路，验证是否能正确发到固定话题、是否会自动补摘要 reply、失败补发队列是否可运行、@ 人是否在当前 agent 的 open_id 作用域下生效。如果发现问题，请按“配置错误 / job_id 错误 / open_id 作用域错误 / 补发未接入”分类输出，并给我一份可执行的修复建议。
+
+整个过程中请先输出理解总结、当前 agent 盘点结果、安装结果、差异清单、待确认配置表和验证结果；不要直接覆盖旧配置，也不要直接启用生产定时任务。只有当验证通过后，再向我汇报最终可执行方案。
 ```
 
 ## 运行前你要准备什么
