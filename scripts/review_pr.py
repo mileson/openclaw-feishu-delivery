@@ -40,8 +40,8 @@ def fetch_pr_context(repo: str, pr_number: int, token: str) -> dict[str, Any]:
 def normalize_base_url(raw_value: str) -> str:
     base = raw_value.rstrip("/")
     if base.endswith("/v1"):
-        return f"{base}/chat/completions"
-    return f"{base}/v1/chat/completions"
+        return f"{base}/responses"
+    return f"{base}/v1/responses"
 
 
 def build_review_prompt(context: dict[str, Any]) -> str:
@@ -93,14 +93,13 @@ def call_model(base_url: str, api_key: str, model: str, prompt: str) -> dict[str
     url = normalize_base_url(base_url)
     payload = {
         "model": model,
-        "messages": [
+        "input": [
             {
                 "role": "system",
-                "content": "你是资深 Python / GitHub 代码审查专家，只输出合法 JSON。",
+                "content": [{"type": "input_text", "text": "你是资深 Python / GitHub 代码审查专家，只输出合法 JSON。"}],
             },
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": [{"type": "input_text", "text": prompt}]},
         ],
-        "temperature": 0.1,
     }
     response = requests.post(
         url,
@@ -113,7 +112,12 @@ def call_model(base_url: str, api_key: str, model: str, prompt: str) -> dict[str
     )
     response.raise_for_status()
     data = response.json()
-    content = data["choices"][0]["message"]["content"]
+    content = data.get("output_text") or ""
+    if not content:
+        for item in data.get("output", []):
+            for content_item in item.get("content", []):
+                if content_item.get("type") == "output_text":
+                    content += content_item.get("text", "")
     return extract_json(content)
 
 
@@ -144,6 +148,43 @@ def validate_result(result: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def fallback_review(context: dict[str, Any], reason: str) -> dict[str, Any]:
+    files = context["files"]
+    risky_prefixes = (".github/", "scripts/", "pyproject.toml", "LICENSE")
+    changed_files = [item["filename"] for item in files]
+    total_changes = sum(int(item.get("changes") or 0) for item in files)
+    touched_risky = [path for path in changed_files if path.startswith(risky_prefixes) or path in risky_prefixes]
+
+    if touched_risky or len(changed_files) > 2 or total_changes > 40:
+        return {
+            "decision": "request_changes",
+            "summary": "AI 审查服务暂时不可用，且本次 PR 超出低风险自动放行范围，已要求人工复核。",
+            "findings": [
+                {
+                    "severity": "medium",
+                    "file": ", ".join(changed_files) or "unknown",
+                    "title": "需要人工复核",
+                    "detail": f"AI 审查服务不可用（{reason}），且本次改动文件或变更规模超出低风险自动合并白名单。",
+                }
+            ],
+            "merge_message": "",
+        }
+
+    return {
+        "decision": "approve",
+        "summary": "AI 审查服务暂时不可用，本次 PR 已通过低风险规则审查并允许自动合并。",
+        "findings": [
+            {
+                "severity": "low",
+                "file": changed_files[0] if changed_files else "unknown",
+                "title": "使用规则审查兜底",
+                "detail": f"由于 AI 审查服务不可用（{reason}），本次采用低风险规则兜底审查：变更文件数不超过 2，且总变更不超过 40 行。",
+            }
+        ],
+        "merge_message": "已通过自动审查并完成合并，感谢贡献。当前使用了低风险规则兜底审查，因为外部 AI 审查服务暂时不可用。",
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Review a GitHub PR with an OpenAI-compatible model.")
     parser.add_argument("--repo", required=True)
@@ -161,7 +202,10 @@ def main() -> int:
 
     context = fetch_pr_context(args.repo, args.pr_number, github_token)
     prompt = build_review_prompt(context)
-    result = call_model(args.base_url, api_key, args.model, prompt)
+    try:
+        result = call_model(args.base_url, api_key, args.model, prompt)
+    except Exception as exc:  # noqa: BLE001
+        result = fallback_review(context, str(exc))
     result = validate_result(result)
     result["pr_number"] = args.pr_number
     result["pr_title"] = context["pr"]["title"]
