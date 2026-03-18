@@ -57,7 +57,6 @@ def build_delivery_memory_rules_section(project_root: Path) -> str:
         f"   - `{root / 'README.md'}`",
         f"   - `{docs_dir / 'openclaw-runtime-workflow.md'}`",
         f"   - `{docs_dir / 'template-contract.md'}`",
-        f"   - `{docs_dir / 'agent-onboarding.md'}`",
         f"6. 新增模板或首个任务时，优先使用：`{root / 'scripts' / 'scaffold_agent_task.py'}`",
         "7. 发送失败必须记录重试过程",
     ]

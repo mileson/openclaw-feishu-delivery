@@ -29,8 +29,7 @@ openclaw-feishu-delivery/
 ├─ README.md
 ├─ docs/openclaw-runtime-workflow.md
 ├─ docs/template-contract.md
-├─ docs/presentation-schema.md
-└─ docs/agent-onboarding.md
+└─ docs/presentation-schema.md
 ```
 
 ## 3. 推荐映射关系
@@ -42,9 +41,9 @@ openclaw-feishu-delivery/
 - `workspace/docs/cron-task-template.md`
   - 收口到 `docs/template-contract.md` + `examples/jobs-spec.example.json`
 - `workspace/docs/agent-onboarding-checklist.md`
-  - 收口到 `docs/agent-onboarding.md`
+  - 收口到本地 onboarding automation / Skill，不再在项目 docs 中维护第二入口
 - `workspace/docs/agent-onboarding-feishu-rules-enforcement.md`
-  - 收口到 `docs/agent-onboarding.md`
+  - 收口到本地 onboarding automation / Skill，不再在项目 docs 中维护第二入口
 - `workspace/docs/feishu-rules-propagation.md`
   - 退场，不再单独维护
 - `workspace/docs/shared-memory.md`

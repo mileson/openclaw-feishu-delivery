@@ -7,7 +7,6 @@
 - [`../README.md`](../README.md)
 - [`template-contract.md`](template-contract.md)
 - [`presentation-schema.md`](presentation-schema.md)
-- [`agent-onboarding.md`](agent-onboarding.md)
 
 ```ascii
 GitHub repo
@@ -27,6 +26,7 @@ openclaw-feishu-delivery/
 - `src/` 与 `scripts/` 是唯一代码源，后续优化直接发 GitHub。
 - `runtime/` 只放本地私有配置，不要提交群 ID、open_id、app_secret。
 - OpenClaw 正式任务通过 `openclaw cron add/edit` 同步，不直接手改 `~/.openclaw/cron/jobs.json`。
+- 若你的本地环境已有 onboarding automation / Skill，应该由它来调用本项目脚本，而不是在本仓库里再复制一套 onboarding 主流程。
 
 ## 典型流程
 

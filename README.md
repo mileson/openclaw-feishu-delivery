@@ -38,10 +38,10 @@
   - 看清任务 prompt / 子脚本到底应该只提供什么 payload，哪些 route / topic / account 语义不该再写进任务
 - [`docs/presentation-schema.md`](docs/presentation-schema.md)
   - 看清 `presentation.schema + structure + styles + blocks` 怎么表达卡片结构，而不是继续在脚本里写 renderer 语义
-- [`docs/agent-onboarding.md`](docs/agent-onboarding.md)
-  - 看清一个新 agent 怎么接入这套项目，尤其是 runtime account 和“首个任务模板”如何建立
 - [`docs/migrate-from-legacy-openclaw.md`](docs/migrate-from-legacy-openclaw.md)
   - 如果你之前已经有旧版 `workspace/docs`、旧 prompt、旧发送脚本，这里是迁移地图
+
+如果你的本地环境通过 onboarding automation / Skill 来接入新 agent，建议让 onboarding 入口去调用本项目脚本，而不是在仓库里再维护一套独立 onboarding 主流程。
 
 ## 功能亮点
 
