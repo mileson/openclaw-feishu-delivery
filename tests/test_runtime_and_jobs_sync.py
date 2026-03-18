@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import json
 from argparse import Namespace
 from pathlib import Path
 
-from openclaw_feishu_cron_kit.core import build_settings_from_args, load_account_credentials
+from openclaw_feishu_cron_kit.core import build_settings, build_settings_from_args, load_account_credentials, send_template_payload
+from openclaw_feishu_cron_kit.presentation_presets import TEMPLATE_PRESENTATIONS
 from openclaw_feishu_cron_kit.jobs_sync import (
     TEMP_JOB_ID_PLACEHOLDER,
     build_add_command,
@@ -153,3 +155,71 @@ def test_build_schedule_flags_supports_every_ms_and_stagger_ms() -> None:
     flags = build_schedule_flags(job)
 
     assert flags == ["--every", "3h", "--stagger", "5m"]
+
+
+def test_send_template_payload_supports_runtime_api_usage(tmp_path: Path, monkeypatch) -> None:
+    project_root = tmp_path / "repo"
+    runtime_dir = project_root / "runtime"
+    examples_dir = project_root / "examples"
+    scripts_dir = project_root / "scripts"
+    runtime_dir.mkdir(parents=True)
+    examples_dir.mkdir()
+    scripts_dir.mkdir()
+    (scripts_dir / "send_message.py").write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    (runtime_dir / "accounts.local.json").write_text(
+        json.dumps({"accounts": {"task": {"app_id": "cli_task", "app_secret": "sec_task"}}}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (runtime_dir / "feishu-templates.local.json").write_text(
+        json.dumps(
+            {
+                "templates": {
+                    "daily-task": {
+                        "description": "今日任务清单",
+                        "required_fields": ["title", "summary", "date", "weekday", "timestamp"],
+                        "route": {
+                            "target": {"id": "on_demo", "type": "union_id"},
+                            "delivery": {"channel": "direct"},
+                            "policy": {"lock_target": True, "lock_delivery": True},
+                            "transport": {"provider": "feishu", "account": "task"},
+                        },
+                        "presentation": TEMPLATE_PRESENTATIONS["daily-task"],
+                    }
+                }
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (examples_dir / "jobs.example.json").write_text('{"jobs":[]}', encoding="utf-8")
+
+    settings = build_settings(project_root=project_root)
+
+    monkeypatch.setattr("openclaw_feishu_cron_kit.core.get_tenant_access_token", lambda app_id, app_secret: "tenant-token")
+    monkeypatch.setattr(
+        "openclaw_feishu_cron_kit.core.dispatch_message",
+        lambda settings, access_token, route, msg_type, content_payload, thread_options=None: {
+            "ok": True,
+            "result": {"code": 0, "data": {"message_id": "om_msg_123"}},
+        },
+    )
+
+    outcome = send_template_payload(
+        settings,
+        template_name="daily-task",
+        data={
+            "title": "超级峰今日任务",
+            "summary": "今天共有 2 个重点任务。",
+            "date": "3月18日",
+            "weekday": "周三",
+            "timestamp": "2026-03-18 08:00",
+            "p0_tasks": [{"task": "修复模板链路", "note": "完成后验证"}],
+            "p1_tasks": [{"task": "整理发布说明", "note": "同步 README"}],
+        },
+        agent_id="task",
+    )
+
+    assert outcome["ok"] is True
+    assert outcome["message_id"] == "om_msg_123"
+    assert outcome["route"]["delivery"]["channel"] == "direct"

@@ -110,6 +110,34 @@ def test_build_generic_card_renders_dynamic_collapsible_panels_for_best_practice
     assert any("📈 本周统计" in panel["header"]["title"]["content"] for panel in panels)
 
 
+def test_build_generic_card_renders_daily_task_panels_from_project_template() -> None:
+    template_config = {
+        "description": "今日任务清单",
+        "header_template": "blue",
+        "presentation": TEMPLATE_PRESENTATIONS["daily-task"],
+    }
+    data = {
+        "title": "超级峰今日任务",
+        "summary": "今天共有 3 个重点任务。",
+        "date": "3月18日",
+        "weekday": "周三",
+        "timestamp": "2026-03-18 08:00",
+        "p0_tasks": [{"task": "修复模板链路", "note": "先完成链路迁移", "url": "https://example.com/p0"}],
+        "p1_tasks": [{"task": "整理发布说明", "note": "更新 README", "url": ""}],
+    }
+
+    card = build_generic_card("daily-task", template_config, data)
+
+    assert card["schema"] == "2.0"
+    assert card["header"]["title"]["content"] == "超级峰今日任务"
+    panels = [element for element in card["body"]["elements"] if element.get("tag") == "collapsible_panel"]
+    assert len(panels) == 2
+    assert panels[0]["header"]["title"]["content"] == "**<font color='#CF1322'>🔥 P0 任务（1）</font>**"
+    assert panels[0]["expanded"] is True
+    assert "修复模板链路" in panels[0]["elements"][0]["content"]
+    assert panels[1]["header"]["title"]["content"] == "**<font color='#333333'>🧩 P1 任务（1）</font>**"
+
+
 def test_materialize_template_registry_replaces_renderer_with_blocks() -> None:
     registry = {
         "templates": {

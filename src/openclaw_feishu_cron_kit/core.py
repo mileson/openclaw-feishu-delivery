@@ -82,7 +82,7 @@ def iso_now() -> str:
 
 
 def resolve_runtime_file(
-    cli_value: str | None,
+    cli_value: str | Path | None,
     runtime_dir: Path,
     runtime_filename: str,
     fallback_path: Path | None,
@@ -95,6 +95,57 @@ def resolve_runtime_file(
         return runtime_path
 
     return fallback_path
+
+
+def build_settings(
+    *,
+    project_root: Path,
+    entry_script: Path | None = None,
+    templates_file: str | Path | None = None,
+    jobs_file: str | Path | None = None,
+    accounts_file: str | Path | None = None,
+    openclaw_config_file: str | Path | None = None,
+    state_dir: str | Path | None = None,
+    logs_dir: str | Path | None = None,
+) -> AppSettings:
+    project_root = Path(project_root).resolve()
+    runtime_dir = project_root / "runtime"
+    entry_script = Path(entry_script).resolve() if entry_script else (project_root / "scripts" / "send_message.py").resolve()
+    templates_path = resolve_runtime_file(
+        templates_file,
+        runtime_dir,
+        "feishu-templates.local.json",
+        project_root / "examples" / "feishu-templates.example.json",
+    )
+    jobs_path = Path(jobs_file) if jobs_file else project_root / "examples" / "jobs.example.json"
+    accounts_path = resolve_runtime_file(
+        accounts_file,
+        runtime_dir,
+        "accounts.local.json",
+        project_root / "examples" / "accounts.example.json",
+    )
+    openclaw_config_path = Path(openclaw_config_file) if openclaw_config_file else None
+    if not openclaw_config_path:
+        env_openclaw_config = os.environ.get("OPENCLAW_CONFIG")
+        if env_openclaw_config:
+            openclaw_config_path = Path(env_openclaw_config)
+        else:
+            candidate = Path.home() / ".openclaw" / "openclaw.json"
+            if candidate.exists():
+                openclaw_config_path = candidate
+    resolved_state_dir = Path(state_dir) if state_dir else project_root / "state"
+    resolved_logs_dir = Path(logs_dir) if logs_dir else project_root / "logs"
+    return AppSettings(
+        project_root=project_root,
+        runtime_dir=runtime_dir,
+        templates_file=templates_path,
+        jobs_file=jobs_path,
+        accounts_file=accounts_path,
+        openclaw_config_file=openclaw_config_path,
+        state_dir=resolved_state_dir,
+        logs_dir=resolved_logs_dir,
+        entry_script=entry_script,
+    )
 
 
 def extract_app_credentials(account: dict[str, Any] | None) -> tuple[str, str] | None:
@@ -404,6 +455,11 @@ def get_tenant_access_token(app_id: str, app_secret: str) -> str:
     return payload["tenant_access_token"]
 
 
+def resolve_access_token(settings: AppSettings, agent_id: str | None, account_name: str | None = None) -> str:
+    app_id, app_secret = load_account_credentials(settings, agent_id, account_name=account_name)
+    return get_tenant_access_token(app_id, app_secret)
+
+
 def post_message_request(access_token: str, route: dict[str, Any], msg_type: str, content_payload: dict[str, Any], label: str) -> dict[str, Any]:
     url = f"https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type={route['target']['type']}"
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
@@ -416,6 +472,31 @@ def reply_message_request(access_token: str, root_message_id: str, msg_type: str
     headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
     payload = {"msg_type": msg_type, "content": json.dumps(content_payload, ensure_ascii=False), "reply_in_thread": True}
     return execute_feishu_request(url, headers, payload, label)
+
+
+def pin_message_request(access_token: str, message_id: str, label: str = "消息置顶") -> dict[str, Any]:
+    url = "https://open.feishu.cn/open-apis/im/v1/pins"
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    payload = {"message_id": message_id}
+    return execute_feishu_request(url, headers, payload, label)
+
+
+def unpin_message_request(access_token: str, message_id: str, label: str = "取消消息置顶") -> dict[str, Any]:
+    url = f"https://open.feishu.cn/open-apis/im/v1/pins/{message_id}"
+    headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+    try:
+        response = requests.delete(url, headers=headers, timeout=30)
+    except requests.RequestException as exc:
+        result = {"code": -1, "msg": f"request_error: {exc}", "raw": str(exc)}
+        print(f"❌ {label}失败: {result}")
+        return {"ok": False, "result": result}
+
+    result = parse_response_json(response)
+    if result.get("code") == 0:
+        print(f"✅ {label}成功")
+        return {"ok": True, "result": result}
+    print(f"❌ {label}失败: {result}")
+    return {"ok": False, "result": result}
 
 
 def extract_message_id(result_meta: dict[str, Any] | None) -> str | None:
@@ -765,29 +846,101 @@ def validate_template_payload(template_name: str, data: dict[str, Any], template
         raise ValueError(f"模板 {template_name} 缺少字段: {', '.join(missing)}")
 
 
-def send_template_message(settings: AppSettings, args: argparse.Namespace) -> int:
-    if not args.template or not args.data:
-        raise ValueError("template 模式必须提供 --template 和 --data")
+def _build_template_retry_args(
+    settings: AppSettings,
+    *,
+    template_name: str,
+    data: dict[str, Any],
+    agent_id: str,
+    job_id: str | None,
+    jobs_file: Path | None,
+    target_id: str | None,
+    target_type: str | None,
+    delivery_channel: str | None,
+    transport_provider: str | None,
+    transport_account: str | None,
+    thread_mode: str,
+    thread_key: str | None,
+    thread_title: str | None,
+    disable_retry_queue: bool,
+) -> argparse.Namespace:
+    return argparse.Namespace(
+        mode="template",
+        template=template_name,
+        data=json.dumps(data, ensure_ascii=False),
+        content=None,
+        agent_id=agent_id,
+        target_id=target_id,
+        target_type=target_type,
+        delivery_channel=delivery_channel,
+        transport_provider=transport_provider,
+        transport_account=transport_account,
+        job_id=job_id,
+        jobs_file=str(jobs_file) if jobs_file else None,
+        thread_mode=thread_mode,
+        thread_key=thread_key,
+        thread_title=thread_title,
+        templates_file=str(settings.templates_file) if settings.templates_file else None,
+        accounts_file=str(settings.accounts_file) if settings.accounts_file else None,
+        state_dir=str(settings.state_dir),
+        logs_dir=str(settings.logs_dir),
+        disable_retry_queue=disable_retry_queue,
+    )
 
+
+def send_template_payload(
+    settings: AppSettings,
+    *,
+    template_name: str,
+    data: dict[str, Any],
+    agent_id: str,
+    job_id: str | None = None,
+    jobs_file: Path | None = None,
+    target_id: str | None = None,
+    target_type: str | None = None,
+    delivery_channel: str | None = None,
+    transport_provider: str | None = None,
+    transport_account: str | None = None,
+    thread_mode: str = "auto",
+    thread_key: str | None = None,
+    thread_title: str | None = None,
+    disable_retry_queue: bool = False,
+) -> dict[str, Any]:
     registry = load_template_registry(settings)
-    template_config = get_template_config(registry, args.template)
-    data = json.loads(args.data)
-    validate_template_payload(args.template, data, template_config)
-    validate_known_job_id(settings, args.job_id, Path(args.jobs_file) if args.jobs_file else None, args.agent_id)
+    template_config = get_template_config(registry, template_name)
+    validate_template_payload(template_name, data, template_config)
+    resolved_jobs_file = jobs_file or settings.jobs_file
+    validate_known_job_id(settings, job_id, resolved_jobs_file, agent_id)
 
     route = resolve_route(
         template_config,
         cli_overrides={
-            "target_id": args.target_id,
-            "target_type": args.target_type,
-            "delivery_channel": args.delivery_channel,
-            "transport_provider": args.transport_provider,
-            "transport_account": args.transport_account,
+            "target_id": target_id,
+            "target_type": target_type,
+            "delivery_channel": delivery_channel,
+            "transport_provider": transport_provider,
+            "transport_account": transport_account,
         },
     )
-    thread_options = resolve_thread_options(args, args.template, template_config, route, data)
-    app_id, app_secret = load_account_credentials(settings, args.agent_id, account_name=route["transport"]["account"] or None)
-    access_token = get_tenant_access_token(app_id, app_secret)
+    runtime_args = _build_template_retry_args(
+        settings,
+        template_name=template_name,
+        data=data,
+        agent_id=agent_id,
+        job_id=job_id,
+        jobs_file=resolved_jobs_file,
+        target_id=target_id,
+        target_type=target_type,
+        delivery_channel=delivery_channel,
+        transport_provider=transport_provider,
+        transport_account=transport_account,
+        thread_mode=thread_mode,
+        thread_key=thread_key,
+        thread_title=thread_title,
+        disable_retry_queue=disable_retry_queue,
+    )
+    thread_options = resolve_thread_options(runtime_args, template_name, template_config, route, data)
+    access_token = resolve_access_token(settings, agent_id, account_name=route["transport"]["account"] or None)
 
     print(
         "📨 路由解析："
@@ -798,24 +951,64 @@ def send_template_message(settings: AppSettings, args: argparse.Namespace) -> in
     if thread_options:
         print(f"🧵 固定话题：key={thread_options['binding_key']} title={thread_options['title']}")
 
-    card = build_generic_card(args.template, template_config, data)
+    card = build_generic_card(template_name, template_config, data)
     result = dispatch_message(settings, access_token, route, "interactive", card, thread_options)
     success = result["ok"]
     response_meta = result["result"]
+    summary_result: dict[str, Any] | None = None
     if success and thread_options:
         summary_result = maybe_send_thread_summary_reply(settings, access_token, thread_options, response_meta, data)
         if summary_result:
-            write_send_audit(settings, "success" if summary_result["ok"] else "failed", args.agent_id, "thread-summary-reply", route=route, template_name=f"{args.template}#summary", response_meta=summary_result["result"])
+            write_send_audit(
+                settings,
+                "success" if summary_result["ok"] else "failed",
+                agent_id,
+                "thread-summary-reply",
+                route=route,
+                template_name=f"{template_name}#summary",
+                response_meta=summary_result["result"],
+            )
             summary_required = bool((((thread_options or {}).get("summary_reply")) or {}).get("required"))
             if summary_required and not summary_result["ok"]:
                 success = False
                 response_meta = summary_result["result"]
 
     if not success:
-        enqueue_retry(settings, args, args.agent_id, args.template, route=route, response_meta=response_meta)
+        enqueue_retry(settings, runtime_args, agent_id, template_name, route=route, response_meta=response_meta)
 
-    write_send_audit(settings, "success" if success else "failed", args.agent_id, "template", route=route, template_name=args.template, response_meta=response_meta)
-    return 0 if success else 1
+    write_send_audit(settings, "success" if success else "failed", agent_id, "template", route=route, template_name=template_name, response_meta=response_meta)
+    return {
+        "ok": success,
+        "route": route,
+        "thread_options": thread_options,
+        "result": response_meta,
+        "summary_result": summary_result,
+        "message_id": extract_message_id(response_meta),
+    }
+
+
+def send_template_message(settings: AppSettings, args: argparse.Namespace) -> int:
+    if not args.template or not args.data:
+        raise ValueError("template 模式必须提供 --template 和 --data")
+    data = json.loads(args.data)
+    outcome = send_template_payload(
+        settings,
+        template_name=args.template,
+        data=data,
+        agent_id=args.agent_id,
+        job_id=args.job_id,
+        jobs_file=Path(args.jobs_file) if args.jobs_file else None,
+        target_id=args.target_id,
+        target_type=args.target_type,
+        delivery_channel=args.delivery_channel,
+        transport_provider=args.transport_provider,
+        transport_account=args.transport_account,
+        thread_mode=args.thread_mode,
+        thread_key=args.thread_key,
+        thread_title=args.thread_title,
+        disable_retry_queue=bool(args.disable_retry_queue),
+    )
+    return 0 if outcome["ok"] else 1
 
 
 def send_text_message(settings: AppSettings, args: argparse.Namespace) -> int:
@@ -839,42 +1032,15 @@ def send_text_message(settings: AppSettings, args: argparse.Namespace) -> int:
 
 
 def build_settings_from_args(args: argparse.Namespace, entry_script: Path) -> AppSettings:
-    project_root = entry_script.resolve().parents[1]
-    runtime_dir = project_root / "runtime"
-    templates_file = resolve_runtime_file(
-        args.templates_file,
-        runtime_dir,
-        "feishu-templates.local.json",
-        project_root / "examples" / "feishu-templates.example.json",
-    )
-    jobs_file = Path(args.jobs_file) if args.jobs_file else project_root / "examples" / "jobs.example.json"
-    accounts_file = resolve_runtime_file(
-        args.accounts_file,
-        runtime_dir,
-        "accounts.local.json",
-        project_root / "examples" / "accounts.example.json",
-    )
-    openclaw_config_file = Path(args.openclaw_config_file) if args.openclaw_config_file else None
-    if not openclaw_config_file:
-        env_openclaw_config = os.environ.get("OPENCLAW_CONFIG")
-        if env_openclaw_config:
-            openclaw_config_file = Path(env_openclaw_config)
-        else:
-            candidate = Path.home() / ".openclaw" / "openclaw.json"
-            if candidate.exists():
-                openclaw_config_file = candidate
-    state_dir = Path(args.state_dir) if args.state_dir else project_root / "state"
-    logs_dir = Path(args.logs_dir) if args.logs_dir else project_root / "logs"
-    return AppSettings(
-        project_root=project_root,
-        runtime_dir=runtime_dir,
-        templates_file=templates_file,
-        jobs_file=jobs_file,
-        accounts_file=accounts_file,
-        openclaw_config_file=openclaw_config_file,
-        state_dir=state_dir,
-        logs_dir=logs_dir,
+    return build_settings(
+        project_root=entry_script.resolve().parents[1],
         entry_script=entry_script,
+        templates_file=args.templates_file,
+        jobs_file=args.jobs_file,
+        accounts_file=args.accounts_file,
+        openclaw_config_file=args.openclaw_config_file,
+        state_dir=args.state_dir,
+        logs_dir=args.logs_dir,
     )
 
 

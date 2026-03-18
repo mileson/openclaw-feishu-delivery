@@ -224,6 +224,39 @@ def simple_sections_presentation() -> dict[str, Any]:
         ])
 
 
+def daily_task_presentation() -> dict[str, Any]:
+    return grouped_panels_presentation([
+            plain_text("{summary}"),
+            plain_text("{date} | {weekday} | {timestamp}"),
+            divider(),
+            collapsible_panel(
+                "🔥 P0 任务（{p0_tasks_count}）",
+                [
+                    record_list("", "p0_tasks", "• {task}", [
+                        "{note}",
+                        "{url}",
+                    ], max_items=12, show_title=False)
+                ],
+                expanded=True,
+                style="danger",
+                empty_text="今天没有 P0 任务。",
+            ),
+            collapsible_panel(
+                "🧩 P1 任务（{p1_tasks_count}）",
+                [
+                    record_list("", "p1_tasks", "• {task}", [
+                        "{note}",
+                        "{url}",
+                    ], max_items=20, show_title=False)
+                ],
+                expanded=False,
+                empty_text="今天没有 P1 任务。",
+            ),
+            divider(),
+            plain_text("💡 有新任务？直接告诉小峰「添加任务：xxx」"),
+        ])
+
+
 def system_status_presentation() -> dict[str, Any]:
     return generic_presentation([
             markdown("✅ **{title}**\n整体状态：{overall_status} | 健康分：{health_score}"),
@@ -679,7 +712,7 @@ TEMPLATE_PRESENTATIONS: dict[str, dict[str, Any]] = {
     "openclaw-twitter-monitor": twitter_monitor_presentation(),
     "producthunt": producthunt_presentation(),
     "vercel-monitor": vercel_monitor_presentation(),
-    "daily-task": simple_sections_presentation(),
+    "daily-task": daily_task_presentation(),
 }
 
 
