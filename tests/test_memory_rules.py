@@ -6,7 +6,7 @@ from openclaw_feishu_cron_kit.memory_rules import (
     END_MARKER,
     START_MARKER,
     inject_delivery_memory_rules,
-    list_workspace_memory_paths,
+    list_configured_workspace_memory_paths,
     update_memory_file,
 )
 
@@ -63,14 +63,52 @@ def test_update_memory_file_supports_create_missing(tmp_path: Path) -> None:
     assert "# MEMORY.md - workspace-product" in memory_text
 
 
-def test_list_workspace_memory_paths_returns_sorted_workspace_memory_files(tmp_path: Path) -> None:
-    (tmp_path / "workspace-b").mkdir()
-    (tmp_path / "workspace-a").mkdir()
-    (tmp_path / "logs").mkdir()
+def test_list_configured_workspace_memory_paths_reads_agent_workspaces(tmp_path: Path) -> None:
+    config_path = tmp_path / "openclaw.json"
+    config_path.write_text(
+        """
+        {
+          "agents": {
+            "list": [
+              {"id": "main", "workspace": "/srv/openclaw/workspace"},
+              {"id": "product", "workspace": "/srv/openclaw/workspace-product"},
+              {"id": "coach", "workspace": "/srv/openclaw/workspace-coach"},
+              {"id": "product", "workspace": "/srv/openclaw/workspace-product"}
+            ]
+          }
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
 
-    memory_paths = list_workspace_memory_paths(tmp_path)
+    memory_paths = list_configured_workspace_memory_paths(config_path)
 
     assert memory_paths == [
-        tmp_path / "workspace-a" / "MEMORY.md",
-        tmp_path / "workspace-b" / "MEMORY.md",
+        Path("/srv/openclaw/workspace/MEMORY.md"),
+        Path("/srv/openclaw/workspace-product/MEMORY.md"),
+        Path("/srv/openclaw/workspace-coach/MEMORY.md"),
+    ]
+
+
+def test_list_configured_workspace_memory_paths_supports_default_workspace_fallbacks(tmp_path: Path) -> None:
+    config_path = tmp_path / "openclaw.json"
+    config_path.write_text(
+        """
+        {
+          "agents": {
+            "list": [
+              {"id": "main"},
+              {"id": "security"}
+            ]
+          }
+        }
+        """.strip(),
+        encoding="utf-8",
+    )
+
+    memory_paths = list_configured_workspace_memory_paths(config_path, state_dir=tmp_path)
+
+    assert memory_paths == [
+        tmp_path / "workspace" / "MEMORY.md",
+        tmp_path / "workspace-security" / "MEMORY.md",
     ]

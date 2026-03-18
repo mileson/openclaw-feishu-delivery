@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -70,6 +71,22 @@ def infer_openclaw_state_dir(project_root: Path, explicit_state_dir: Path | None
             return Path(value).expanduser().resolve()
 
     return Path("~/.openclaw").expanduser().resolve()
+
+
+def infer_openclaw_config_path(
+    project_root: Path,
+    explicit_config_path: Path | None = None,
+    explicit_state_dir: Path | None = None,
+) -> Path:
+    if explicit_config_path is not None:
+        return explicit_config_path.expanduser().resolve()
+
+    config_path = os.getenv("OPENCLAW_CONFIG_PATH")
+    if config_path:
+        return Path(config_path).expanduser().resolve()
+
+    state_dir = infer_openclaw_state_dir(project_root, explicit_state_dir)
+    return state_dir / "openclaw.json"
 
 
 def insert_managed_block(text: str, block: str) -> str:
@@ -143,7 +160,37 @@ def update_memory_file(
     }
 
 
-def list_workspace_memory_paths(state_dir: Path, workspace_glob: str = "workspace-*") -> list[Path]:
-    root = state_dir.expanduser().resolve()
-    workspaces = [path for path in sorted(root.glob(workspace_glob)) if path.is_dir()]
-    return [workspace / "MEMORY.md" for workspace in workspaces]
+def list_configured_workspace_memory_paths(
+    openclaw_config_path: Path,
+    *,
+    state_dir: Path | None = None,
+) -> list[Path]:
+    config_path = openclaw_config_path.expanduser().resolve()
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    base_dir = (state_dir or config_path.parent).expanduser().resolve()
+
+    memory_paths: list[Path] = []
+    seen: set[str] = set()
+
+    for agent in payload.get("agents", {}).get("list", []):
+        agent_id = (agent.get("id") or "").strip()
+        if not agent_id:
+            continue
+
+        raw_workspace = (agent.get("workspace") or "").strip()
+        if raw_workspace:
+            workspace_dir = Path(raw_workspace).expanduser()
+            if not workspace_dir.is_absolute():
+                workspace_dir = base_dir / workspace_dir
+        elif agent_id == "main":
+            workspace_dir = base_dir / "workspace"
+        else:
+            workspace_dir = base_dir / f"workspace-{agent_id}"
+
+        workspace_key = str(workspace_dir.resolve())
+        if workspace_key in seen:
+            continue
+        seen.add(workspace_key)
+        memory_paths.append(Path(workspace_key) / "MEMORY.md")
+
+    return memory_paths

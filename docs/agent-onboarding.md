@@ -73,7 +73,7 @@ Delivery runtime
 ```ascii
 项目级
   -> sync_workspace_memory_rules.py
-  -> 扫描所有 workspace-*/MEMORY.md
+  -> 只读取 openclaw.json 里的真实 agent workspaces
 
 单 agent 入职
   -> agent-onboarding/scripts/inject_agent_memory_rules.py
