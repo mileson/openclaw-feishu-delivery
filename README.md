@@ -136,6 +136,9 @@ openclaw-feishu-delivery
 模板配置
   -> route.transport.provider   # feishu / telegram / discord
   -> route.delivery.channel     # direct / message / topic
+  -> presentation.schema        # 1.0 / 2.0
+  -> presentation.structure     # generic / collapsible-list / grouped-panels / panel-report
+  -> presentation.styles        # 面板样式、颜色、图标
   -> presentation.blocks        # 卡片怎么拼
   -> required_fields            # payload 最低字段要求
 
@@ -147,7 +150,21 @@ openclaw-feishu-delivery
 ```
 
 也就是说，脚本本身不再承担“这个模板长什么样”的业务语义。  
-运行期真正决定消息内容的，是模板配置中的 `presentation.blocks`。
+运行期真正决定消息内容的，是模板配置中的 `presentation.schema + structure + styles + blocks`。
+
+推荐优先按“功能型结构族”选模板，而不是先按业务场景命名渲染器：
+
+```ascii
+结构族
+├─ generic
+│  └─ 普通线性报告，适合状态、列表、简报
+├─ collapsible-list
+│  └─ 单卡片 + 多个折叠列表，适合知识整理、日报
+├─ grouped-panels
+│  └─ 按记录动态生成多个 panel，适合 agent 分组推荐
+└─ panel-report
+   └─ 摘要 + 发现 + 任务详情 panel，适合诊断/巡检
+```
 
 推荐的模板结构如下：
 
@@ -159,25 +176,50 @@ openclaw-feishu-delivery
       "header_template": "blue",
       "required_fields": ["title", "summary", "report_date", "organized_at", "execution_steps", "timestamp", "thread_summary"],
       "presentation": {
+        "schema": "2.0",
+        "structure": "collapsible-list",
         "header_title_template": "📚 每日知识整理 · {report_date}",
+        "styles": {
+          "panels": {
+            "default": {
+              "title_color": "#333333",
+              "header_background_color": "grey",
+              "border_color": "grey"
+            }
+          }
+        },
         "blocks": [
-          {"type": "markdown", "template": "✅ **{title}**\n{summary}"},
-          {
-            "type": "facts",
-            "title": "执行概览",
-            "items": [
-              {"label": "报告日期", "path": "report_date"},
-              {"label": "整理时间", "path": "organized_at"},
-              {"label": "发送时间", "path": "timestamp"}
-            ]
-          },
+          {"type": "plain_text", "template": "{summary}"},
+          {"type": "plain_text", "template": "{report_date} | {timestamp}"},
           {"type": "divider"},
           {
-            "type": "record_list",
-            "title": "执行步骤",
-            "path": "execution_steps",
-            "title_template": "**{name}**",
-            "lines": ["状态：{status}", "文件：`{file}`", "{detail}"]
+            "type": "collapsible_panel",
+            "title": "✅ 执行步骤（{execution_steps_count}）",
+            "expanded": true,
+            "blocks": [
+              {
+                "type": "record_list",
+                "path": "execution_steps",
+                "title": "",
+                "show_title": false,
+                "title_template": "<font color='#1890FF'>• **{name}**</font>",
+                "lines": ["文件：`{file}`", "{detail}"]
+              }
+            ]
+          },
+          {
+            "type": "collapsible_panel",
+            "title": "💡 关键洞察（{insights_count}）",
+            "expanded": false,
+            "blocks": [
+              {
+                "type": "list",
+                "path": "insights",
+                "title": "",
+                "show_title": false,
+                "empty_text": "本轮没有新增洞察。"
+              }
+            ]
           }
         ]
       },
@@ -201,7 +243,7 @@ openclaw-feishu-delivery
 ## 旧模板迁移为配置 blocks
 
 如果你手里还有旧的 `renderer` 模板，不需要再把渲染逻辑写回 Python。  
-直接把旧模板一次性 materialize 成 `presentation.blocks` 即可：
+直接把旧模板一次性 materialize 成 `presentation.schema + structure + styles + blocks` 即可：
 
 ```bash
 python3 scripts/materialize_template_presentations.py \
@@ -212,7 +254,7 @@ python3 scripts/materialize_template_presentations.py \
 
 这个脚本只负责做一次迁移：
 
-- 根据已知模板类型生成标准 `presentation.blocks`
+- 根据已知模板类型生成标准结构族配置
 - 把旧的 `renderer` 字段移除
 - 让运行期只依赖配置，不再依赖模板名对应的 Python 逻辑
 
@@ -259,7 +301,7 @@ python3 scripts/scaffold_agent_task.py \
   --agent-id engineer \
   --job-name "每周运维汇总" \
   --job-description "每周汇总核心运维状态并发送固定话题报告" \
-  --layout diagnosis-report \
+  --layout panel-report \
   --channel topic \
   --transport-provider feishu \
   --transport-account engineer \
@@ -274,6 +316,16 @@ python3 scripts/scaffold_agent_task.py \
 - `runtime/feishu-templates.local.json` 中的新模板
 - `runtime/jobs-spec.local.json` 中的新任务定义
 - `runtime/payloads/<template>.example.json` 示例 payload
+
+推荐优先使用这些结构族名称：
+
+- `generic`
+- `collapsible-list`
+- `grouped-panels`
+- `panel-report`
+- `distribution-summary`
+
+旧名字如 `knowledge-digest`、`diagnosis-report`、`daily-diary` 仍保留为兼容别名。
 
 然后再同步到 OpenClaw：
 

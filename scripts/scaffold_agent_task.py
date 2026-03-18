@@ -15,6 +15,22 @@ from openclaw_feishu_cron_kit.presentation_presets import SCAFFOLD_LAYOUTS, get_
 
 
 LAYOUT_REQUIRED_FIELDS: dict[str, list[str]] = {
+    "generic": ["title", "summary", "sections", "timestamp"],
+    "collapsible-list": [
+        "title",
+        "summary",
+        "report_date",
+        "organized_at",
+        "execution_steps",
+        "completed_tasks",
+        "new_topics",
+        "insights",
+        "lessons",
+        "timestamp",
+    ],
+    "grouped-panels": ["title", "summary", "date", "timestamp", "completed", "highlights", "tomorrow_plan"],
+    "panel-report": ["title", "summary", "timestamp", "report_window", "stats", "major_findings", "jobs"],
+    "distribution-summary": ["title", "timestamp", "skill_name", "source", "target_agent", "match_score"],
     "items-report": ["title", "count", "items", "timestamp"],
     "sections-report": ["title", "summary", "sections", "timestamp"],
     "system-status": ["title", "timestamp", "overall_status", "health_score"],
@@ -185,7 +201,7 @@ def build_example_payload(args: argparse.Namespace) -> dict:
                 ],
             }
         )
-    elif args.layout == "sections-report":
+    elif args.layout in {"generic", "sections-report"}:
         base.update({"sections": [{"title": "核心内容", "lines": ["第一条", "第二条"]}]})
     elif args.layout == "system-status":
         base.update(
@@ -200,7 +216,7 @@ def build_example_payload(args: argparse.Namespace) -> dict:
                 "actions": ["继续观察重试队列"],
             }
         )
-    elif args.layout == "knowledge-digest":
+    elif args.layout in {"collapsible-list", "knowledge-digest"}:
         base.update(
             {
                 "report_date": "2026-03-17",
@@ -212,18 +228,27 @@ def build_example_payload(args: argparse.Namespace) -> dict:
                 "lessons": ["教训 A"],
             }
         )
-    elif args.layout == "daily-diary":
-        base.update({"date": "2026-03-17", "completed": ["完成项 A"], "highlights": ["发现 A"], "tomorrow_plan": ["明日计划 A"]})
-    elif args.layout == "diagnosis-report":
+    elif args.layout in {"grouped-panels", "daily-diary"}:
+        base.update(
+            {
+                "date": "2026-03-17",
+                "completed": ["完成项 A"],
+                "highlights": ["发现 A"],
+                "tomorrow_plan": ["明日计划 A"],
+                "agent_sections": [{"agent": args.agent_id, "status": "ok", "task_count": 3, "highlights": [{"title": "核心推进", "desc": "完成关键动作"}]}],
+                "exceptions": [{"agent": args.agent_id, "task": "示例任务", "status": "warning", "error": "这里写异常说明"}],
+            }
+        )
+    elif args.layout in {"panel-report", "diagnosis-report"}:
         base.update(
             {
                 "report_window": "近12小时",
                 "stats": {"checked_jobs": 16, "abnormal_jobs": 1, "failed_jobs": 0, "delayed_jobs": 0},
                 "major_findings": [{"severity": "P1", "title": "示例发现", "summary": "这里写摘要", "job_name": "示例任务"}],
-                "jobs": [{"name": "示例任务", "agent": args.agent_id, "schedule": "0 9 * * *", "status": "ok", "summary": "运行正常"}],
+                "jobs": [{"name": "示例任务", "agent": args.agent_id, "schedule": "0 9 * * *", "status": "ok", "summary": "运行正常", "findings": ["发现 A"], "suggestions": ["建议 A"]}],
             }
         )
-    elif args.layout == "distribution-report":
+    elif args.layout in {"distribution-summary", "distribution-report"}:
         base.update({"skill_name": "example-skill", "source": "evolution", "target_agent": args.agent_id, "match_score": 88})
     if args.channel == "topic":
         base["thread_summary"] = {

@@ -109,6 +109,9 @@ The runtime model is now intentionally configuration-driven:
 template config
   -> route.transport.provider   # feishu / telegram / discord
   -> route.delivery.channel     # direct / message / topic
+  -> presentation.schema        # 1.0 / 2.0
+  -> presentation.structure     # generic / collapsible-list / grouped-panels / panel-report
+  -> presentation.styles        # panel style tokens
   -> presentation.blocks        # how the message is assembled
   -> required_fields            # minimum payload contract
 
@@ -121,9 +124,19 @@ scripts
 
 Runtime behavior should come from config, not from Python template-specific branches.
 
+Use functional structure families first, not scene-specific renderer names:
+
+```ascii
+structure families
+├─ generic
+├─ collapsible-list
+├─ grouped-panels
+└─ panel-report
+```
+
 ## Migrate Old Renderers Into Config Blocks
 
-If you still have legacy templates with `renderer`, convert them once into `presentation.blocks`:
+If you still have legacy templates with `renderer`, convert them once into `presentation.schema + structure + styles + blocks`:
 
 ```bash
 python3 scripts/materialize_template_presentations.py \
@@ -177,7 +190,7 @@ python3 scripts/scaffold_agent_task.py \
   --agent-id engineer \
   --job-name "Weekly Ops Report" \
   --job-description "Summarize core ops status into a fixed-thread report" \
-  --layout diagnosis-report \
+  --layout panel-report \
   --channel topic \
   --transport-provider feishu \
   --transport-account engineer \
@@ -192,6 +205,16 @@ The scaffold writes:
 - a template entry into `runtime/feishu-templates.local.json`
 - a job spec into `runtime/jobs-spec.local.json`
 - an example payload into `runtime/payloads/`
+
+Preferred layout names:
+
+- `generic`
+- `collapsible-list`
+- `grouped-panels`
+- `panel-report`
+- `distribution-summary`
+
+Old names like `knowledge-digest`, `diagnosis-report`, and `daily-diary` remain as compatibility aliases.
 
 ## Prompt for Xiaolongxia OpenClaw
 

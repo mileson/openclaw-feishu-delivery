@@ -4,7 +4,7 @@
 
 This release moves the project closer to a config-first delivery foundation:
 
-- template content is now driven by `presentation.blocks`
+- template content is now driven by `presentation.schema + structure + styles + blocks`
 - transport/provider is now modeled in config via `route.transport.provider`
 - legacy runtime templates can be migrated into config with a materialization script
 - new agent delivery tasks can be scaffolded with a single command
@@ -26,18 +26,35 @@ This release fixes that by moving rendering intent into template config itself.
 
 ### 1. Config-Driven Rendering
 
-Templates can now define message structure through `presentation.blocks`.
+Templates can now define message structure through functional layout families and explicit structure metadata.
+
+Key config fields:
+
+- `presentation.schema`
+- `presentation.structure`
+- `presentation.styles`
+- `presentation.blocks`
 
 Supported block types:
 
+- `plain_text`
 - `markdown`
 - `facts`
 - `list`
 - `record_list`
+- `collapsible_panel`
+- `collapsible_record_panels`
 - `divider`
 - `note`
 
-Runtime scripts now read config and assemble cards from those blocks.
+Recommended structure families:
+
+- `generic`
+- `collapsible-list`
+- `grouped-panels`
+- `panel-report`
+
+Runtime scripts now read config and assemble cards from those structures and blocks.
 
 ### 2. Transport Provider in Config
 
@@ -70,7 +87,7 @@ python3 scripts/materialize_template_presentations.py \
   --drop-renderer
 ```
 
-This converts known legacy templates into explicit `presentation.blocks`.
+This converts known legacy templates into explicit structure config.
 
 ### 4. One-Command Task Scaffolding
 
@@ -101,4 +118,5 @@ upgrade existing runtime
 
 - `python3 -m py_compile ...` passed
 - `python3 -m pytest tests/test_renderer.py tests/test_runtime_and_jobs_sync.py` passed
-- `daily-knowledge` now has a regression test that verifies `execution_steps`, `insights`, and related sections are rendered from config blocks
+- `daily-knowledge` now has a regression test that verifies schema 2.0 collapsible panels are rendered from config
+- dynamic grouped panels now have coverage through the `openclaw-best-practices` renderer test

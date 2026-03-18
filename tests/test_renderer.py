@@ -66,16 +66,48 @@ def test_build_generic_card_renders_presentation_blocks_for_daily_knowledge() ->
 
     card = build_generic_card("daily-knowledge", template_config, data)
 
+    assert card["schema"] == "2.0"
     assert card["header"]["title"]["content"] == "每日知识整理任务完成"
-    rendered_blocks = [
-        element["text"]["content"]
-        for element in card["elements"]
-        if element.get("tag") == "div"
-    ]
-    assert any("**执行步骤**" in content for content in rendered_blocks)
-    assert any("读取昨天记忆" in content for content in rendered_blocks)
-    assert any("**关键洞察**" in content for content in rendered_blocks)
-    assert any("洞察 A" in content for content in rendered_blocks)
+    body_elements = card["body"]["elements"]
+    assert body_elements[0]["text"]["content"] == "✅ 完成！已整理昨天工作记录。"
+    assert body_elements[1]["text"]["content"] == "2026-03-17 | 2026-03-18 02:00"
+
+    panels = [element for element in body_elements if element.get("tag") == "collapsible_panel"]
+    assert len(panels) >= 5
+    assert panels[0]["header"]["title"]["content"] == "**<font color='#333333'>✅ 执行步骤（1）</font>**"
+    assert "读取昨天记忆" in panels[0]["elements"][0]["content"]
+    assert any("💡 关键洞察" in panel["header"]["title"]["content"] for panel in panels)
+    assert any("洞察 A" in element["content"] for panel in panels for element in panel["elements"])
+
+
+def test_build_generic_card_renders_dynamic_collapsible_panels_for_best_practices() -> None:
+    template_config = {
+        "description": "最佳实践",
+        "header_template": "blue",
+        "presentation": TEMPLATE_PRESENTATIONS["openclaw-best-practices"],
+    }
+    data = {
+        "title": "OpenClaw 每日最佳实践推送",
+        "timestamp": "2026-03-18 10:00",
+        "active_agents": ["blogger", "product"],
+        "total_scenarios": 5,
+        "recommendations": [
+            {"agent": "blogger", "scenarios": [{"name": "热点整理", "score": 92, "description": "自动整理", "benefit": "提升效率", "source": "memory"}]},
+            {"agent": "product", "scenarios": [{"name": "竞品跟踪", "score": 88, "description": "持续跟踪", "benefit": "减少漏看", "source": "cron"}]},
+        ],
+        "universal_scenarios": [{"name": "日报归档", "description": "统一沉淀", "benefit": "便于复盘"}],
+        "weekly_stats": {"agents_covered": 6, "scenarios_sent": 18, "avg_score": 87, "coverage_rate": "75%"},
+    }
+
+    card = build_generic_card("openclaw-best-practices", template_config, data)
+
+    assert card["schema"] == "2.0"
+    panels = [element for element in card["body"]["elements"] if element.get("tag") == "collapsible_panel"]
+    assert panels[0]["header"]["title"]["content"] == "**<font color='#333333'>🤖 blogger（1 个推荐）</font>**"
+    assert panels[0]["expanded"] is True
+    assert "热点整理" in panels[0]["elements"][0]["content"]
+    assert any("🌐 通用场景" in panel["header"]["title"]["content"] for panel in panels)
+    assert any("📈 本周统计" in panel["header"]["title"]["content"] for panel in panels)
 
 
 def test_materialize_template_registry_replaces_renderer_with_blocks() -> None:
@@ -92,7 +124,11 @@ def test_materialize_template_registry_replaces_renderer_with_blocks() -> None:
     updated, changes = materialize_template_registry(registry, drop_renderer=True)
 
     template = updated["templates"]["daily-knowledge"]
-    assert changes == [{"template": "daily-knowledge", "blocks": "updated", "renderer": "removed"}]
+    assert changes == [{"template": "daily-knowledge", "blocks": "updated", "metadata": "updated", "transport": "updated", "renderer": "removed"}]
     assert "renderer" not in template
     assert template["presentation"]["header_title_template"] == "📚 每日知识整理 · {report_date}"
-    assert template["presentation"]["blocks"][0]["type"] == "markdown"
+    assert template["presentation"]["schema"] == "2.0"
+    assert template["presentation"]["structure"] == "collapsible-list"
+    assert template["presentation"]["styles"]["panels"]["default"]["title_color"] == "#333333"
+    assert template["presentation"]["blocks"][0]["type"] == "plain_text"
+    assert template["route"]["transport"] == {"provider": "feishu"}
