@@ -74,6 +74,56 @@ python3 /root/.openclaw/scripts/send_feishu_message.py --template "模板名称"
     assert "## 当前状态" in updated
 
 
+def test_inject_delivery_memory_rules_strips_hr_legacy_variant(tmp_path: Path) -> None:
+    project_root = tmp_path / "openclaw-feishu-delivery"
+    project_root.mkdir()
+
+    text = """# MEMORY.md - hr
+
+## 飞书消息发送铁律（最高优先级）
+
+### 唯一发送方式
+
+```bash
+python3 /root/.openclaw/scripts/send_feishu_message.py \\
+  --template "模板名称" \\
+  --data 'JSON数据'
+```
+
+## 任务执行铁律（强制）
+
+- 初始化
+"""
+    updated, action = inject_delivery_memory_rules(text, project_root)
+
+    assert action == "normalized"
+    assert "## 飞书消息发送铁律（最高优先级）" not in updated
+    assert "/root/.openclaw/scripts/send_feishu_message.py" not in updated
+    assert "## 任务执行铁律（强制）" in updated
+
+
+def test_inject_delivery_memory_rules_rewrites_observed_legacy_references(tmp_path: Path) -> None:
+    project_root = tmp_path / "openclaw-feishu-delivery"
+    project_root.mkdir()
+
+    text = """# MEMORY.md - product
+
+## 工作记录
+
+- 通用工具`send_feishu_message.py`使用main账号的open_id导致跨应用错误
+- 临时解决方案：使用message工具直接发送
+- /root/.openclaw/workspace/docs/feishu-message-standard.md（新增skill-distribution模板）
+"""
+    updated, action = inject_delivery_memory_rules(text, project_root)
+
+    assert action == "normalized"
+    assert "send_feishu_message.py" not in updated
+    assert "feishu-message-standard.md" not in updated
+    assert "旧消息链路曾因账号接收者配置错误导致跨应用发送失败" in updated
+    assert "当前统一使用项目内模板与账号配置发送" in updated
+    assert str(project_root / "runtime" / "feishu-templates.local.json") in updated
+
+
 def test_update_memory_file_supports_create_missing(tmp_path: Path) -> None:
     project_root = tmp_path / "openclaw-feishu-delivery"
     workspace_dir = tmp_path / "workspace-product"

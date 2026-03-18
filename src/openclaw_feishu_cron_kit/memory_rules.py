@@ -12,6 +12,7 @@ LEGACY_SECTION_TITLE = "## 飞书消息项目铁律（强制）"
 LEGACY_SECTION_TITLES = [
     LEGACY_SECTION_TITLE,
     "## 🔔 飞书消息发送铁律（最高优先级）",
+    "## 飞书消息发送铁律（最高优先级）",
     "## 飞书消息铁律",
     "## 飞书消息铁律（强制）",
 ]
@@ -23,6 +24,19 @@ MANAGED_BLOCK_RE = re.compile(
 )
 LEGACY_SECTION_RE = re.compile(
     rf"(?ms)^(?:{'|'.join(re.escape(title) for title in LEGACY_SECTION_TITLES)})\n.*?(?=^## |\Z)"
+)
+LEGACY_LINE_REPLACEMENTS = (
+    (
+        re.compile(
+            r"^- 通用工具`send_feishu_message\.py`使用main账号的open_id导致跨应用错误$",
+            flags=re.M,
+        ),
+        "- 旧消息链路曾因账号接收者配置错误导致跨应用发送失败",
+    ),
+    (
+        re.compile(r"^- 临时解决方案：使用message工具直接发送$", flags=re.M),
+        "- 当前统一使用项目内模板与账号配置发送",
+    ),
 )
 
 
@@ -124,17 +138,32 @@ def strip_legacy_sections(text: str) -> str:
     return cleanup_blank_lines(LEGACY_SECTION_RE.sub("", text))
 
 
+def normalize_legacy_reference_lines(text: str, project_root: Path) -> str:
+    updated = text
+    for pattern, replacement in LEGACY_LINE_REPLACEMENTS:
+        updated = pattern.sub(replacement, updated)
+
+    legacy_standard = "/root/.openclaw/workspace/docs/feishu-message-standard.md（新增skill-distribution模板）"
+    if legacy_standard in updated:
+        runtime_file = project_root.expanduser().resolve() / "runtime" / "feishu-templates.local.json"
+        updated = updated.replace(
+            legacy_standard,
+            f"{runtime_file}（skill-distribution 模板配置）",
+        )
+    return cleanup_blank_lines(updated)
+
+
 def inject_delivery_memory_rules(memory_text: str, project_root: Path) -> tuple[str, str]:
     normalized = memory_text.rstrip("\n")
     block = build_managed_delivery_memory_block(project_root)
 
     if MANAGED_BLOCK_RE.search(normalized):
         staged = MANAGED_BLOCK_RE.sub(MANAGED_BLOCK_TOKEN, normalized, count=1)
-        cleaned = strip_legacy_sections(staged)
+        cleaned = normalize_legacy_reference_lines(strip_legacy_sections(staged), project_root)
         updated = cleaned.replace(MANAGED_BLOCK_TOKEN, block, 1)
         return updated.rstrip() + "\n", "replaced"
 
-    cleaned = strip_legacy_sections(normalized)
+    cleaned = normalize_legacy_reference_lines(strip_legacy_sections(normalized), project_root)
     if cleaned != normalized:
         updated = insert_managed_block(cleaned, block)
         return updated.rstrip() + "\n", "normalized"
