@@ -11,6 +11,7 @@ from .storage import append_jsonl, load_json_file, save_json_file
 
 PAYLOAD_START = "OPENCLAW_TEMPLATE_PAYLOAD_START"
 PAYLOAD_END = "OPENCLAW_TEMPLATE_PAYLOAD_END"
+PAYLOAD_FILE = "OPENCLAW_TEMPLATE_PAYLOAD_FILE"
 
 
 class PayloadExtractionError(ValueError):
@@ -92,17 +93,70 @@ def load_delivery_config(config_path: Path) -> dict[str, Any]:
     return {"version": payload.get("version") or 1, "jobs": normalized_jobs}
 
 
+def _load_payload_file(path: Path) -> dict[str, Any]:
+    if not path.is_absolute():
+        raise PayloadExtractionError("payload 文件路径必须是绝对路径")
+    if not path.exists():
+        raise PayloadExtractionError(f"payload 文件不存在: {path}")
+    payload = load_json_file(path, None)
+    if not isinstance(payload, dict):
+        raise PayloadExtractionError("payload 文件内容必须是 JSON 对象")
+    return payload
+
+
+def _extract_balanced_json_object(text: str) -> str | None:
+    start = text.find("{")
+    if start < 0:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            depth += 1
+            continue
+        if char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return None
+
+
 def extract_payload_block(summary: str) -> dict[str, Any]:
     text = (summary or "").strip()
     if not text:
         raise PayloadExtractionError("cron summary 为空")
+
+    file_pattern = re.compile(rf"{PAYLOAD_FILE}\s*[:：]?\s*`?([^\n`]+)`?")
+    file_match = file_pattern.search(text)
+    if file_match:
+        payload_path = Path(file_match.group(1).strip())
+        return _load_payload_file(payload_path)
 
     pattern = re.compile(
         rf"{PAYLOAD_START}\s*(?:```json)?\s*(\{{.*?\}})\s*(?:```)?\s*{PAYLOAD_END}",
         re.S,
     )
     match = pattern.search(text)
-    candidate = match.group(1) if match else text
+    if match:
+        candidate = match.group(1)
+    elif PAYLOAD_START in text:
+        start_index = text.index(PAYLOAD_START) + len(PAYLOAD_START)
+        candidate = _extract_balanced_json_object(text[start_index:]) or text
+    else:
+        candidate = text
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError as exc:

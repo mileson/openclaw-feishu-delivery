@@ -73,12 +73,29 @@ runtime/feishu-templates.local.json
 ```ascii
 agent cron job
   -> 只产出模板 payload
-  -> 最终回复写入 OPENCLAW_TEMPLATE_PAYLOAD block
+  -> 短 payload：最终回复写入 OPENCLAW_TEMPLATE_PAYLOAD block
+  -> 长 payload：先落盘到 JSON 文件，再只回传 OPENCLAW_TEMPLATE_PAYLOAD_FILE
   -> project wrapper 解析 run summary
   -> wrapper 调用 send_template_payload()
 ```
 
 这样能避免 agent 在 prompt 里临时拼接 `send_message.py --data '{...}'` 并口头声称发送成功。
+
+推荐约定：
+
+```ascii
+短内容任务
+  -> OPENCLAW_TEMPLATE_PAYLOAD_START
+  -> {...}
+  -> OPENCLAW_TEMPLATE_PAYLOAD_END
+
+长内容任务
+  -> 先写入 /root/.openclaw/tmp/cron-payloads/<job-id>.json
+  -> 最终只输出：
+     OPENCLAW_TEMPLATE_PAYLOAD_FILE: /root/.openclaw/tmp/cron-payloads/<job-id>.json
+```
+
+长内容任务优先使用文件交付，因为 OpenClaw 的 cron summary 可能截断较长 JSON，导致 wrapper 无法读取完整 payload。
 
 ## 4. 标准发送方式
 
@@ -102,14 +119,15 @@ python3 /root/.openclaw/projects/openclaw-feishu-delivery/scripts/send_message.p
 任务 prompt
   -> 先描述业务动作
   -> 再列出 payload 必填字段
-  -> 最后给标准 send_message.py 调用骨架
+  -> 最后给 wrapper 交付协议
 ```
 
 推荐写法：
 
 - 路由由模板配置决定，禁止手填 target / delivery / thread 参数
 - 固定话题任务必须提供 `thread_summary`
-- 最终输出必须包含 send_message.py 的成功信号
+- 长内容任务优先写 payload 文件，再输出 `OPENCLAW_TEMPLATE_PAYLOAD_FILE`
+- 不要在 summary 里声称“已发送成功”；发送成功与否由 wrapper 审计决定
 
 ## 6. 不推荐的写法
 
