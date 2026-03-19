@@ -7,7 +7,11 @@
       "agent_id": "main",
       "jobs_file": "/root/.openclaw/cron/jobs.json",
       "payload_mode": "file",
-      "payload_dir": "/root/.openclaw/tmp/cron-payloads"
+      "payload_dir": "/root/.openclaw/tmp/cron-payloads",
+      "payload_file_globs": [
+        "daily-knowledge-*.json"
+      ],
+      "payload_file_grace_ms": 300000
     },
     {
       "job_id": "0e6fdf1d-e7e0-48a5-bf52-cea01f793d50",

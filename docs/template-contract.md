@@ -105,9 +105,18 @@ agent cron job
   "template": "skill-hourly-report",
   "agent_id": "evolution",
   "payload_mode": "file",
-  "payload_dir": "/root/.openclaw/tmp/cron-payloads"
+  "payload_dir": "/root/.openclaw/tmp/cron-payloads",
+  "payload_file_globs": ["skill-hourly-report-*.json"],
+  "payload_file_grace_ms": 300000
 }
 ```
+
+其中：
+
+- `payload_mode=file`：强制任务走文件交付
+- `payload_dir`：payload 文件允许落盘的目录
+- `payload_file_globs`：当模型漏掉 `OPENCLAW_TEMPLATE_PAYLOAD_FILE` 这一行时，wrapper 可按文件名模式回捞本轮最新 payload
+- `payload_file_grace_ms`：回捞窗口，避免误捞到更早一轮的旧文件
 
 原因：
 

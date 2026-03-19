@@ -84,6 +84,12 @@ def load_delivery_config(config_path: Path) -> dict[str, Any]:
         payload_mode = str(item.get("payload_mode") or "auto").strip().lower() or "auto"
         if payload_mode not in {"auto", "inline", "file"}:
             raise ValueError("cron wrapper job.payload_mode 仅支持 auto / inline / file")
+        payload_file_globs = item.get("payload_file_globs") or []
+        if isinstance(payload_file_globs, str):
+            payload_file_globs = [payload_file_globs]
+        if not isinstance(payload_file_globs, list) or any(not str(pattern).strip() for pattern in payload_file_globs):
+            raise ValueError("cron wrapper job.payload_file_globs 必须是非空字符串数组")
+        payload_file_grace_ms = int(item.get("payload_file_grace_ms") or 300000)
         normalized_jobs.append(
             {
                 "job_id": job_id,
@@ -93,6 +99,8 @@ def load_delivery_config(config_path: Path) -> dict[str, Any]:
                 "runs_dir": item.get("runs_dir"),
                 "payload_mode": payload_mode,
                 "payload_dir": item.get("payload_dir"),
+                "payload_file_globs": [str(pattern).strip() for pattern in payload_file_globs],
+                "payload_file_grace_ms": payload_file_grace_ms,
             }
         )
     return {"version": payload.get("version") or 1, "jobs": normalized_jobs}
@@ -144,11 +152,40 @@ def _extract_balanced_json_object(text: str) -> str | None:
     return None
 
 
+def _discover_payload_file(
+    *,
+    payload_dir: Path | None,
+    payload_file_globs: list[str] | None,
+    run_at_ms: int | None,
+    payload_file_grace_ms: int,
+) -> Path | None:
+    if payload_dir is None or not payload_dir.exists():
+        return None
+    patterns = payload_file_globs or ["*.json"]
+    min_mtime_ms = (run_at_ms or 0) - max(payload_file_grace_ms, 0)
+    candidates: list[tuple[float, Path]] = []
+    for pattern in patterns:
+        for candidate in payload_dir.glob(pattern):
+            if not candidate.is_file():
+                continue
+            mtime_ms = candidate.stat().st_mtime * 1000
+            if min_mtime_ms and mtime_ms < min_mtime_ms:
+                continue
+            candidates.append((mtime_ms, candidate))
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][1]
+
+
 def extract_payload_block(
     summary: str,
     *,
     payload_mode: str = "auto",
     payload_dir: Path | None = None,
+    payload_file_globs: list[str] | None = None,
+    run_at_ms: int | None = None,
+    payload_file_grace_ms: int = 300000,
 ) -> dict[str, Any]:
     text = (summary or "").strip()
     if not text:
@@ -157,9 +194,17 @@ def extract_payload_block(
     file_pattern = re.compile(rf"{PAYLOAD_FILE}\s*[:：]?\s*`?([^\n`]+)`?")
     file_match = file_pattern.search(text)
     if payload_mode == "file":
-        if not file_match:
-            raise PayloadExtractionError("当前 job 配置要求使用 payload 文件交付，但 summary 未提供 OPENCLAW_TEMPLATE_PAYLOAD_FILE")
-        payload_path = Path(file_match.group(1).strip())
+        if file_match:
+            payload_path = Path(file_match.group(1).strip())
+        else:
+            payload_path = _discover_payload_file(
+                payload_dir=payload_dir,
+                payload_file_globs=payload_file_globs,
+                run_at_ms=run_at_ms,
+                payload_file_grace_ms=payload_file_grace_ms,
+            )
+            if payload_path is None:
+                raise PayloadExtractionError("当前 job 配置要求使用 payload 文件交付，但 summary 未提供 OPENCLAW_TEMPLATE_PAYLOAD_FILE")
         return _load_payload_file(payload_path, payload_dir=payload_dir)
     if payload_mode == "inline" and file_match:
         raise PayloadExtractionError("当前 job 配置要求使用内联 payload，不应输出 OPENCLAW_TEMPLATE_PAYLOAD_FILE")
@@ -256,6 +301,9 @@ def deliver_configured_jobs(
                 str(latest.get("summary") or ""),
                 payload_mode=payload_mode,
                 payload_dir=payload_dir,
+                payload_file_globs=job.get("payload_file_globs"),
+                run_at_ms=run_at_ms,
+                payload_file_grace_ms=int(job.get("payload_file_grace_ms") or 300000),
             )
         except PayloadExtractionError as exc:
             results.append({"job_id": job_id, "status": "missing-payload", "run_at_ms": run_at_ms, "detail": str(exc)})
