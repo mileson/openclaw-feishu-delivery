@@ -38,6 +38,22 @@ def test_extract_payload_block_supports_file_reference(tmp_path: Path) -> None:
     assert payload["thread_summary"]["bullets"] == ["a"]
 
 
+def test_extract_payload_block_rejects_file_outside_configured_dir(tmp_path: Path) -> None:
+    payload_path = tmp_path / "payload.json"
+    payload_path.write_text(
+        json.dumps({"title": "日报", "timestamp": "2026-03-19 09:00", "thread_summary": {"notice": "完成", "bullets": ["a"]}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    summary = f"任务完成。\n{PAYLOAD_FILE}: {payload_path}"
+
+    try:
+        extract_payload_block(summary, payload_mode="file", payload_dir=tmp_path / "other")
+    except ValueError as exc:
+        assert "payload 文件必须位于" in str(exc)
+    else:
+        raise AssertionError("expected PayloadExtractionError")
+
+
 def test_extract_payload_block_supports_balanced_json_without_end_marker() -> None:
     summary = f"""
 任务完成。
@@ -204,7 +220,22 @@ def test_deliver_configured_jobs_reads_payload_file_reference(tmp_path: Path, mo
     )
     config_path = runtime_dir / "cron-delivery.local.json"
     config_path.write_text(
-        json.dumps({"version": 1, "jobs": [{"job_id": "job-1", "template": "daily-knowledge", "agent_id": "main"}]}, ensure_ascii=False, indent=2),
+        json.dumps(
+            {
+                "version": 1,
+                "jobs": [
+                    {
+                        "job_id": "job-1",
+                        "template": "daily-knowledge",
+                        "agent_id": "main",
+                        "payload_mode": "file",
+                        "payload_dir": str(payload_dir),
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
     payload_path = payload_dir / "job-1.json"

@@ -81,6 +81,9 @@ def load_delivery_config(config_path: Path) -> dict[str, Any]:
         agent_id = str(item.get("agent_id") or "").strip()
         if not job_id or not template_name or not agent_id:
             raise ValueError("cron wrapper job 配置必须包含 job_id/template/agent_id")
+        payload_mode = str(item.get("payload_mode") or "auto").strip().lower() or "auto"
+        if payload_mode not in {"auto", "inline", "file"}:
+            raise ValueError("cron wrapper job.payload_mode 仅支持 auto / inline / file")
         normalized_jobs.append(
             {
                 "job_id": job_id,
@@ -88,14 +91,21 @@ def load_delivery_config(config_path: Path) -> dict[str, Any]:
                 "agent_id": agent_id,
                 "jobs_file": item.get("jobs_file"),
                 "runs_dir": item.get("runs_dir"),
+                "payload_mode": payload_mode,
+                "payload_dir": item.get("payload_dir"),
             }
         )
     return {"version": payload.get("version") or 1, "jobs": normalized_jobs}
 
 
-def _load_payload_file(path: Path) -> dict[str, Any]:
+def _load_payload_file(path: Path, *, payload_dir: Path | None = None) -> dict[str, Any]:
     if not path.is_absolute():
         raise PayloadExtractionError("payload 文件路径必须是绝对路径")
+    if payload_dir is not None:
+        try:
+            path.relative_to(payload_dir)
+        except ValueError as exc:
+            raise PayloadExtractionError(f"payload 文件必须位于 {payload_dir}") from exc
     if not path.exists():
         raise PayloadExtractionError(f"payload 文件不存在: {path}")
     payload = load_json_file(path, None)
@@ -134,16 +144,28 @@ def _extract_balanced_json_object(text: str) -> str | None:
     return None
 
 
-def extract_payload_block(summary: str) -> dict[str, Any]:
+def extract_payload_block(
+    summary: str,
+    *,
+    payload_mode: str = "auto",
+    payload_dir: Path | None = None,
+) -> dict[str, Any]:
     text = (summary or "").strip()
     if not text:
         raise PayloadExtractionError("cron summary 为空")
 
     file_pattern = re.compile(rf"{PAYLOAD_FILE}\s*[:：]?\s*`?([^\n`]+)`?")
     file_match = file_pattern.search(text)
+    if payload_mode == "file":
+        if not file_match:
+            raise PayloadExtractionError("当前 job 配置要求使用 payload 文件交付，但 summary 未提供 OPENCLAW_TEMPLATE_PAYLOAD_FILE")
+        payload_path = Path(file_match.group(1).strip())
+        return _load_payload_file(payload_path, payload_dir=payload_dir)
+    if payload_mode == "inline" and file_match:
+        raise PayloadExtractionError("当前 job 配置要求使用内联 payload，不应输出 OPENCLAW_TEMPLATE_PAYLOAD_FILE")
     if file_match:
         payload_path = Path(file_match.group(1).strip())
-        return _load_payload_file(payload_path)
+        return _load_payload_file(payload_path, payload_dir=payload_dir)
 
     pattern = re.compile(
         rf"{PAYLOAD_START}\s*(?:```json)?\s*(\{{.*?\}})\s*(?:```)?\s*{PAYLOAD_END}",
@@ -215,6 +237,8 @@ def deliver_configured_jobs(
         template_name = job["template"]
         agent_id = job["agent_id"]
         runs_dir = _normalize_optional_path(job.get("runs_dir")) or runs_root
+        payload_mode = str(job.get("payload_mode") or "auto")
+        payload_dir = _normalize_optional_path(job.get("payload_dir"))
         latest = load_latest_finished_run(runs_dir, job_id)
         if not latest:
             results.append({"job_id": job_id, "status": "missing-run"})
@@ -228,7 +252,11 @@ def deliver_configured_jobs(
             continue
 
         try:
-            data = extract_payload_block(str(latest.get("summary") or ""))
+            data = extract_payload_block(
+                str(latest.get("summary") or ""),
+                payload_mode=payload_mode,
+                payload_dir=payload_dir,
+            )
         except PayloadExtractionError as exc:
             results.append({"job_id": job_id, "status": "missing-payload", "run_at_ms": run_at_ms, "detail": str(exc)})
             write_wrapper_audit(settings, action="missing-payload", job_id=job_id, template_name=template_name, run_at_ms=run_at_ms, detail=str(exc))

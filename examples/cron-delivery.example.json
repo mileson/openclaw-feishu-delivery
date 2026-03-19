@@ -5,7 +5,9 @@
       "job_id": "540ca570-6fad-44fe-90e9-b94916d4a07f",
       "template": "daily-knowledge",
       "agent_id": "main",
-      "jobs_file": "/root/.openclaw/cron/jobs.json"
+      "jobs_file": "/root/.openclaw/cron/jobs.json",
+      "payload_mode": "file",
+      "payload_dir": "/root/.openclaw/tmp/cron-payloads"
     },
     {
       "job_id": "0e6fdf1d-e7e0-48a5-bf52-cea01f793d50",

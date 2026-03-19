@@ -97,6 +97,30 @@ agent cron job
 
 长内容任务优先使用文件交付，因为 OpenClaw 的 cron summary 可能截断较长 JSON，导致 wrapper 无法读取完整 payload。
 
+建议把这层要求写进 `runtime/cron-delivery.local.json`，而不是塞进飞书模板配置：
+
+```json
+{
+  "job_id": "d588b00c-9add-45ce-9e17-cc62ba0e99b2",
+  "template": "skill-hourly-report",
+  "agent_id": "evolution",
+  "payload_mode": "file",
+  "payload_dir": "/root/.openclaw/tmp/cron-payloads"
+}
+```
+
+原因：
+
+```ascii
+feishu template
+  -> 定义“消息发到哪里、长什么样”
+
+cron wrapper config
+  -> 定义“任务怎么把 payload 交给 wrapper”
+```
+
+也就是说，`payload_mode=file` 是任务交付协议，不是飞书消息模板样式。
+
 ## 4. 标准发送方式
 
 任务侧唯一推荐的结构化消息发送方式是：
