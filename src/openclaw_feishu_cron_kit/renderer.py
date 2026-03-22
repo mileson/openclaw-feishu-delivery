@@ -21,6 +21,17 @@ _PANEL_DEFAULT_STYLE = {
     "padding": "8px 8px 8px 8px",
 }
 
+_TABLE_ALLOWED_COLUMN_KEYS = {
+    "name",
+    "display_name",
+    "width",
+    "data_type",
+    "vertical_align",
+    "horizontal_align",
+    "format",
+    "date_format",
+}
+
 
 def _markdown_element(content: str) -> dict[str, Any]:
     return {
@@ -349,6 +360,126 @@ def _render_text_block(block: dict[str, Any], root: dict[str, Any], *, surface: 
     return [_plain_text_element(content)]
 
 
+def _normalize_table_cell_value(value: Any, data_type: str, root: dict[str, Any], row: dict[str, Any]) -> Any:
+    if data_type in {"text", "lark_md", "markdown"}:
+        if value in (_MISSING, None):
+            return ""
+        return _render_template(str(value), root, row) if isinstance(value, str) else _stringify(value)
+
+    if data_type == "number":
+        if value in (_MISSING, None, ""):
+            return None
+        if isinstance(value, (int, float)):
+            return value
+        try:
+            return float(str(value))
+        except ValueError:
+            return _stringify(value)
+
+    if data_type == "options":
+        if value in (_MISSING, None, ""):
+            return []
+        raw_items = value if isinstance(value, list) else [value]
+        normalized_items: list[Any] = []
+        for raw_item in raw_items:
+            if isinstance(raw_item, dict):
+                text = str(raw_item.get("text") or raw_item.get("label") or "").strip()
+                if not text:
+                    continue
+                option = {"text": text}
+                color = str(raw_item.get("color") or "").strip()
+                if color:
+                    option["color"] = color
+                normalized_items.append(option)
+                continue
+            text = str(raw_item).strip()
+            if text:
+                normalized_items.append(text)
+        return normalized_items
+
+    if data_type == "persons":
+        if value in (_MISSING, None, ""):
+            return []
+        if isinstance(value, list):
+            return [str(item).strip() for item in value if str(item).strip()]
+        return str(value).strip()
+
+    if data_type == "date":
+        if value in (_MISSING, None, ""):
+            return None
+        if isinstance(value, (int, float)):
+            return int(value)
+        try:
+            return int(str(value))
+        except ValueError:
+            return None
+
+    return value
+
+
+def _render_table_block(block: dict[str, Any], root: dict[str, Any], *, surface: str) -> list[dict[str, Any]]:
+    if surface != "body":
+        return []
+
+    raw_columns = block.get("columns") or []
+    if not isinstance(raw_columns, list) or not raw_columns:
+        return []
+
+    path = str(block.get("path") or "").strip()
+    raw_rows = block.get("rows")
+    if raw_rows is None and path:
+        raw_rows = _resolve_path(root, path)
+    rows_source = raw_rows if isinstance(raw_rows, list) else []
+
+    empty_text = _render_template(str(block.get("empty_text") or "").strip(), root)
+    if not rows_source:
+        return [_plain_text_element(empty_text)] if empty_text else []
+
+    columns: list[dict[str, Any]] = []
+    column_types: dict[str, str] = {}
+    for raw_column in raw_columns:
+        if not isinstance(raw_column, dict):
+            continue
+        name = str(raw_column.get("name") or "").strip()
+        if not name:
+            continue
+        column: dict[str, Any] = {}
+        for key in _TABLE_ALLOWED_COLUMN_KEYS:
+            value = raw_column.get(key)
+            if value not in (None, ""):
+                column[key] = value
+        column.setdefault("data_type", "text")
+        columns.append(column)
+        column_types[name] = str(column.get("data_type") or "text").strip()
+
+    if not columns:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for raw_row in rows_source:
+        if not isinstance(raw_row, dict):
+            continue
+        row: dict[str, Any] = {}
+        for column in columns:
+            name = str(column["name"])
+            row[name] = _normalize_table_cell_value(raw_row.get(name, _MISSING), column_types[name], root, raw_row)
+        rows.append(row)
+
+    if not rows:
+        return [_plain_text_element(empty_text)] if empty_text else []
+
+    table: dict[str, Any] = {
+        "tag": "table",
+        "columns": columns,
+        "rows": rows,
+    }
+    for key in ("element_id", "margin", "page_size", "row_height", "row_max_height", "freeze_first_column", "header_style"):
+        value = block.get(key)
+        if value not in (None, ""):
+            table[key] = value
+    return [table]
+
+
 def _render_nested_blocks(
     blocks: list[dict[str, Any]],
     root: dict[str, Any],
@@ -484,6 +615,8 @@ def _render_block(
         return _render_facts_block(block, root, surface=surface)
     if block_type in {"list", "record_list"}:
         return _render_collection_block(block, root, surface=surface)
+    if block_type == "table":
+        return _render_table_block(block, root, surface=surface)
     if block_type == "collapsible_panel":
         if surface == "panel":
             return []
@@ -494,7 +627,11 @@ def _render_block(
         return _render_collapsible_record_panels(block, root, presentation)
     if block_type == "note":
         content = _render_template(str(block.get("template") or ""), root)
-        return [_note_element(content)] if content else []
+        if not content:
+            return []
+        if _normalize_schema(presentation.get("schema")) == "2.0":
+            return [_plain_text_element(content)]
+        return [_note_element(content)]
     return []
 
 
@@ -520,11 +657,15 @@ def _build_blocks_card(template_name: str, template_config: dict[str, Any], data
         "title": {"tag": "plain_text", "content": title},
     }
     if schema == "2.0":
-        return {
+        card = {
             "schema": "2.0",
             "header": header,
             "body": {"elements": elements},
         }
+        config = _get_card_config(presentation)
+        if config:
+            card["config"] = config
+        return card
 
     card_config = {"wide_screen_mode": True}
     card_config.update(_get_card_config(presentation))

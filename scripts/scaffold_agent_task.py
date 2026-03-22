@@ -11,7 +11,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from openclaw_feishu_cron_kit.presentation_presets import SCAFFOLD_LAYOUTS, get_scaffold_layout
+from openclaw_feishu_cron_kit.presentation_presets import get_scaffold_layout, load_scaffold_layouts
+
+SCAFFOLD_LAYOUTS = load_scaffold_layouts()
 
 
 LAYOUT_REQUIRED_FIELDS: dict[str, list[str]] = {

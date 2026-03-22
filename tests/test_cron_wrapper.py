@@ -38,6 +38,20 @@ def test_extract_payload_block_supports_file_reference(tmp_path: Path) -> None:
     assert payload["thread_summary"]["bullets"] == ["a"]
 
 
+def test_extract_payload_block_supports_markdown_wrapped_file_reference(tmp_path: Path) -> None:
+    payload_path = tmp_path / "topic-research-report.json"
+    payload_path.write_text(
+        json.dumps({"title": "深度选题研究完成", "timestamp": "2026-03-20 06:00", "thread_summary": {"notice": "完成", "bullets": ["a"]}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    summary = f"## 深度选题研究完成\n\n**{PAYLOAD_FILE}: {payload_path}**"
+
+    payload = extract_payload_block(summary)
+
+    assert payload["title"] == "深度选题研究完成"
+    assert payload["thread_summary"]["notice"] == "完成"
+
+
 def test_extract_payload_block_discovers_latest_file_when_summary_missing(tmp_path: Path) -> None:
     payload_dir = tmp_path / "payloads"
     payload_dir.mkdir()
@@ -63,6 +77,27 @@ def test_extract_payload_block_discovers_latest_file_when_summary_missing(tmp_pa
     )
 
     assert payload["title"] == "新日报"
+
+
+def test_extract_payload_block_discovers_file_when_summary_is_empty_in_file_mode(tmp_path: Path) -> None:
+    payload_dir = tmp_path / "payloads"
+    payload_dir.mkdir()
+    payload_path = payload_dir / "daily-diary-1773934439699.json"
+    payload_path.write_text(
+        json.dumps({"title": "小峰每日日记简报", "date": "2026-03-19", "thread_summary": {"notice": "完成", "bullets": ["a"]}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    payload = extract_payload_block(
+        "",
+        payload_mode="file",
+        payload_dir=payload_dir,
+        payload_file_globs=["daily-diary-*.json"],
+        run_at_ms=1773934439699,
+    )
+
+    assert payload["title"] == "小峰每日日记简报"
+    assert payload["date"] == "2026-03-19"
 
 
 def test_extract_payload_block_rejects_file_outside_configured_dir(tmp_path: Path) -> None:
@@ -93,6 +128,39 @@ def test_extract_payload_block_supports_balanced_json_without_end_marker() -> No
 
     assert payload["title"] == "日报"
     assert payload["thread_summary"]["notice"] == "完成"
+
+
+def test_extract_payload_block_supports_embedded_json_after_noisy_text() -> None:
+    summary = """
+OK，前面是一段噪声文本，不应影响 payload 解析。
+
+```text
+一些旧日志和错误提示
+```
+
+{
+  "title": "定时任务诊断报告",
+  "timestamp": "2026-03-20 02:08 (Asia/Shanghai)",
+  "report_window": "近12小时",
+  "summary": "诊断完成",
+  "stats": {
+    "checked_jobs": 25,
+    "abnormal_jobs": 4,
+    "failed_jobs": 2,
+    "delayed_jobs": 0
+  },
+  "thread_summary": {
+    "notice": "已发送定时任务诊断报告，主要发现如下。",
+    "bullets": ["异常任务 4 个", "重点问题：每日日记超时"]
+  }
+}
+""".strip()
+
+    payload = extract_payload_block(summary)
+
+    assert payload["title"] == "定时任务诊断报告"
+    assert payload["stats"]["checked_jobs"] == 25
+    assert payload["thread_summary"]["bullets"][0] == "异常任务 4 个"
 
 
 def test_deliver_configured_jobs_sends_latest_undelivered_run(tmp_path: Path, monkeypatch) -> None:

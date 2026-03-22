@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from copy import deepcopy
@@ -17,6 +18,7 @@ import requests
 
 from .renderer import build_generic_card, build_summary_post, build_summary_text
 from .storage import append_jsonl, load_json_file, save_json_file
+from .template_normalizers import normalize_template_data
 
 DELIVERY_CHANNELS = {"direct", "message", "topic"}
 USER_TARGET_TYPES = {"open_id", "union_id", "user_id", "email"}
@@ -42,6 +44,7 @@ RETRYABLE_ERROR_TOKENS = [
 ]
 RETRY_DELAY_SECONDS = {1: 5 * 60, 2: 30 * 60}
 RETRY_MAX_ATTEMPTS = 3
+_TEMPLATE_TOKEN_RE = re.compile(r"\{([^{}]+)\}")
 
 
 @dataclass
@@ -285,6 +288,35 @@ def build_default_thread_key(agent_id: str, template_name: str, target_id: str) 
     return f"topic:{hashlib.sha1(raw.encode('utf-8')).hexdigest()[:12]}"
 
 
+def _resolve_template_value(payload: Any, path: str) -> Any:
+    current = payload
+    for chunk in path.split("."):
+        key = chunk.strip()
+        if not key or not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def _render_data_template(template: str, data: dict[str, Any]) -> str:
+    raw_template = str(template or "").strip()
+    if not raw_template:
+        return ""
+
+    def replace(match: re.Match[str]) -> str:
+        token = match.group(1).strip()
+        value = _resolve_template_value(data, token)
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (int, float)):
+            return str(value)
+        return str(value).strip()
+
+    return _TEMPLATE_TOKEN_RE.sub(replace, raw_template).strip()
+
+
 def resolve_thread_options(args: argparse.Namespace, template_name: str, template_config: dict[str, Any], route: dict[str, Any], data: dict[str, Any]) -> dict[str, Any] | None:
     if route["delivery"]["channel"] != "topic":
         return None
@@ -296,8 +328,13 @@ def resolve_thread_options(args: argparse.Namespace, template_name: str, templat
     if not enabled:
         return None
 
-    binding_key = thread_config.get("binding_key_template") or args.thread_key or (f"job:{args.job_id}" if args.job_id else build_default_thread_key(args.agent_id or "default", template_name, route["target"]["id"]))
-    title = args.thread_title or thread_config.get("title_template") or data.get("title") or template_config.get("description") or template_name
+    binding_key_template = str(thread_config.get("binding_key_template") or "").strip()
+    rendered_binding_key = _render_data_template(binding_key_template, data) if binding_key_template else ""
+    title_template = str(thread_config.get("title_template") or "").strip()
+    rendered_title = _render_data_template(title_template, data) if title_template else ""
+
+    binding_key = args.thread_key or rendered_binding_key or (f"job:{args.job_id}" if args.job_id else build_default_thread_key(args.agent_id or "default", template_name, route["target"]["id"]))
+    title = args.thread_title or rendered_title or data.get("title") or template_config.get("description") or template_name
     return {
         "mode": mode,
         "binding_key": binding_key,
@@ -588,6 +625,67 @@ def dispatch_message(settings: AppSettings, access_token: str, route: dict[str, 
     if channel == "topic":
         return dispatch_topic_message(settings, access_token, route, msg_type, content_payload, thread_options)
     raise ValueError(f"未知 delivery.channel: {channel}")
+
+
+def extract_thread_followups(data: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_followups = data.get("thread_followups") or []
+    if not raw_followups:
+        return []
+    if not isinstance(raw_followups, list):
+        raise ValueError("thread_followups 必须是数组")
+
+    followups: list[dict[str, Any]] = []
+    for raw_item in raw_followups:
+        if not isinstance(raw_item, dict):
+            raise ValueError("thread_followups 的每一项都必须是对象")
+        template_name = str(raw_item.get("template_name") or "").strip()
+        followup_data = raw_item.get("data")
+        if not template_name:
+            raise ValueError("thread_followups.template_name 不能为空")
+        if not isinstance(followup_data, dict):
+            raise ValueError("thread_followups.data 必须是对象")
+        followups.append(
+            {
+                "template_name": template_name,
+                "required": bool(raw_item.get("required", True)),
+                "data": followup_data,
+            }
+        )
+    return followups
+
+
+def maybe_send_thread_followup_cards(
+    settings: AppSettings,
+    registry: dict[str, Any],
+    access_token: str,
+    route: dict[str, Any],
+    thread_options: dict[str, Any] | None,
+    data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not thread_options:
+        return []
+
+    followups = extract_thread_followups(data)
+    results: list[dict[str, Any]] = []
+    for followup in followups:
+        followup_template = followup["template_name"]
+        template_config = get_template_config(registry, followup_template)
+        followup_data = normalize_template_data(followup_template, followup["data"])
+        validate_template_payload(followup_template, followup_data, template_config)
+        card = build_generic_card(followup_template, template_config, followup_data)
+        result = dispatch_message(settings, access_token, route, "interactive", card, thread_options)
+        results.append(
+            {
+                "template_name": followup_template,
+                "required": bool(followup["required"]),
+                "ok": bool(result["ok"]),
+                "result": result["result"],
+                "message_id": extract_message_id(result["result"]),
+            }
+        )
+        if not result["ok"] and followup["required"]:
+            break
+    return results
 
 
 def extract_thread_summary_data(thread_options: dict[str, Any] | None, data: dict[str, Any]) -> dict[str, Any] | None:
@@ -908,6 +1006,7 @@ def send_template_payload(
 ) -> dict[str, Any]:
     registry = load_template_registry(settings)
     template_config = get_template_config(registry, template_name)
+    data = normalize_template_data(template_name, data)
     validate_template_payload(template_name, data, template_config)
     resolved_jobs_file = jobs_file or settings.jobs_file
     validate_known_job_id(settings, job_id, resolved_jobs_file, agent_id)
@@ -955,23 +1054,41 @@ def send_template_payload(
     result = dispatch_message(settings, access_token, route, "interactive", card, thread_options)
     success = result["ok"]
     response_meta = result["result"]
+    followup_results: list[dict[str, Any]] = []
     summary_result: dict[str, Any] | None = None
     if success and thread_options:
-        summary_result = maybe_send_thread_summary_reply(settings, access_token, thread_options, response_meta, data)
-        if summary_result:
+        followup_results = maybe_send_thread_followup_cards(settings, registry, access_token, route, thread_options, data)
+        for followup_result in followup_results:
             write_send_audit(
                 settings,
-                "success" if summary_result["ok"] else "failed",
+                "success" if followup_result["ok"] else "failed",
                 agent_id,
-                "thread-summary-reply",
+                "thread-followup",
                 route=route,
-                template_name=f"{template_name}#summary",
-                response_meta=summary_result["result"],
+                template_name=followup_result["template_name"],
+                response_meta=followup_result["result"],
             )
-            summary_required = bool((((thread_options or {}).get("summary_reply")) or {}).get("required"))
-            if summary_required and not summary_result["ok"]:
+            if not followup_result["ok"] and followup_result["required"]:
+                response_meta = followup_result["result"]
                 success = False
-                response_meta = summary_result["result"]
+                break
+
+        if success:
+            summary_result = maybe_send_thread_summary_reply(settings, access_token, thread_options, response_meta, data)
+            if summary_result:
+                write_send_audit(
+                    settings,
+                    "success" if summary_result["ok"] else "failed",
+                    agent_id,
+                    "thread-summary-reply",
+                    route=route,
+                    template_name=f"{template_name}#summary",
+                    response_meta=summary_result["result"],
+                )
+                summary_required = bool((((thread_options or {}).get("summary_reply")) or {}).get("required"))
+                if summary_required and not summary_result["ok"]:
+                    success = False
+                    response_meta = summary_result["result"]
 
     if not success:
         enqueue_retry(settings, runtime_args, agent_id, template_name, route=route, response_meta=response_meta)
@@ -982,6 +1099,7 @@ def send_template_payload(
         "route": route,
         "thread_options": thread_options,
         "result": response_meta,
+        "followup_results": followup_results,
         "summary_result": summary_result,
         "message_id": extract_message_id(response_meta),
     }

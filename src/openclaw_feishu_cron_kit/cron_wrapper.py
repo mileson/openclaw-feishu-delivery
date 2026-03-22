@@ -122,8 +122,18 @@ def _load_payload_file(path: Path, *, payload_dir: Path | None = None) -> dict[s
     return payload
 
 
-def _extract_balanced_json_object(text: str) -> str | None:
-    start = text.find("{")
+def _normalize_payload_file_reference(raw_value: str) -> Path:
+    value = raw_value.strip().strip("`").strip()
+    absolute_match = re.search(r"(\/[\w.@%+=:,~/-]+\.json)", value)
+    if absolute_match:
+        value = absolute_match.group(1)
+    else:
+        value = value.strip("*_").strip("`'\"").rstrip(".,;:!?)】）]}>")
+    return Path(value)
+
+
+def _extract_balanced_json_object(text: str, *, start_index: int = 0) -> str | None:
+    start = text.find("{", start_index)
     if start < 0:
         return None
     depth = 0
@@ -150,6 +160,25 @@ def _extract_balanced_json_object(text: str) -> str | None:
             if depth == 0:
                 return text[start : index + 1]
     return None
+
+
+def _extract_parseable_json_object(text: str) -> str | None:
+    best_candidate: str | None = None
+    search_from = 0
+    while True:
+        start = text.find("{", search_from)
+        if start < 0:
+            return best_candidate
+        candidate = _extract_balanced_json_object(text, start_index=start)
+        search_from = start + 1
+        if candidate is None:
+            continue
+        try:
+            payload = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict) and (best_candidate is None or len(candidate) > len(best_candidate)):
+            best_candidate = candidate
 
 
 def _discover_payload_file(
@@ -188,14 +217,11 @@ def extract_payload_block(
     payload_file_grace_ms: int = 300000,
 ) -> dict[str, Any]:
     text = (summary or "").strip()
-    if not text:
-        raise PayloadExtractionError("cron summary 为空")
-
     file_pattern = re.compile(rf"{PAYLOAD_FILE}\s*[:：]?\s*`?([^\n`]+)`?")
-    file_match = file_pattern.search(text)
+    file_match = file_pattern.search(text) if text else None
     if payload_mode == "file":
         if file_match:
-            payload_path = Path(file_match.group(1).strip())
+            payload_path = _normalize_payload_file_reference(file_match.group(1))
         else:
             payload_path = _discover_payload_file(
                 payload_dir=payload_dir,
@@ -206,10 +232,12 @@ def extract_payload_block(
             if payload_path is None:
                 raise PayloadExtractionError("当前 job 配置要求使用 payload 文件交付，但 summary 未提供 OPENCLAW_TEMPLATE_PAYLOAD_FILE")
         return _load_payload_file(payload_path, payload_dir=payload_dir)
+    if not text:
+        raise PayloadExtractionError("cron summary 为空")
     if payload_mode == "inline" and file_match:
         raise PayloadExtractionError("当前 job 配置要求使用内联 payload，不应输出 OPENCLAW_TEMPLATE_PAYLOAD_FILE")
     if file_match:
-        payload_path = Path(file_match.group(1).strip())
+        payload_path = _normalize_payload_file_reference(file_match.group(1))
         return _load_payload_file(payload_path, payload_dir=payload_dir)
 
     pattern = re.compile(
@@ -221,9 +249,9 @@ def extract_payload_block(
         candidate = match.group(1)
     elif PAYLOAD_START in text:
         start_index = text.index(PAYLOAD_START) + len(PAYLOAD_START)
-        candidate = _extract_balanced_json_object(text[start_index:]) or text
+        candidate = _extract_parseable_json_object(text[start_index:]) or text[start_index:]
     else:
-        candidate = text
+        candidate = _extract_parseable_json_object(text) or text
     try:
         payload = json.loads(candidate)
     except json.JSONDecodeError as exc:
