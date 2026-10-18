@@ -899,7 +899,7 @@ logs/
 | [`docs/`](docs/) | 项目说明与参考文档 | 查阅运行、设计与维护约定 |
 | [`examples/`](examples/) | 可参考的输入与调用示例 | 用现有样例核对输入格式和调用方式 |
 | [`pyproject.toml`](pyproject.toml) | Python 包与工具配置 | 核对依赖、工程目标与现有命令 |
-| [`runtime/`](runtime/) | 运行时实现 | 按当前职责查阅实现及目录内说明 |
+| [`runtime/`](runtime/) | 消息投递运行时实现 | 排查任务执行、消息投递与运行状态 |
 | [`scripts/`](scripts/) | 开发与维护脚本 | 查找构建、验证或维护的现有命令 |
 | [`skills/`](skills/) | Agent 技能模块 | 查找具体场景对应的技能入口 |
 | [`src/`](src/) | 应用或服务实现 | 定位应用界面与业务实现 |
