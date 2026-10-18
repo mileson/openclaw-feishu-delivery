@@ -1,5 +1,3 @@
-[**简体中文**](README.md) | [English](README.en.md)
-
 # OpenClaw 飞书消息发送
 
 > 让 OpenClaw 把日报、巡检、内容发布和监控结果稳定发到飞书固定话题的消息投递项目。
@@ -850,6 +848,8 @@ logs/
 
 <a id="readme-section-25"></a>
 
-## License
+<a id="license"></a>
+
+## 许可证
 
 MIT
