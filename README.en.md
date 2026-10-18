@@ -4,29 +4,9 @@
 
 > A delivery foundation that helps OpenClaw send reports, inspections, publishing results, and monitoring summaries into fixed Feishu threads with retries.
 
-## What This Repository Is
+[Core Capabilities](#readme-section-1) · [Requirements](#readme-section-2) · [Quick Start](#readme-section-3) · [Config-First Runtime Model](#readme-section-5) · [Production-Oriented Examples](#readme-section-7) · [What This Repository Is](#readme-section-11) · [Project Structure](#readme-section-15)
 
-This repository packages a production-proven Feishu delivery workflow into a reusable open-source project. It is designed for OpenClaw-style multi-agent systems, but it can also be used by plain cron jobs or normal agent conversations.
-
-It focuses on four practical goals:
-
-- Send structured messages through templates
-- Keep the same class of reports inside the same fixed Feishu thread
-- Automatically append a summary reply after the full card
-- Retry failed deliveries instead of waiting for the next scheduled run
-
-```ascii
-What you get
-────────────────────────────────
-Agent / scheduled job / conversation
-  -> send a template message
-  -> route into a fixed Feishu thread
-  -> append a summary reply
-  -> enqueue retry on transient failure
-  -> retry after 5 minutes
-  -> retry again after 30 minutes
-  -> mark as failed only after the final attempt
-```
+<a id="readme-section-1"></a>
 
 ## Core Capabilities
 
@@ -39,198 +19,7 @@ Agent / scheduled job / conversation
 - Multi-agent, multi-account configuration
 - Sanitized examples based on real production task categories
 
-## Production-Oriented Examples
-
-The template and job names in this repository are intentionally kept close to real production usage rather than demo-style naming.
-
-```ascii
-blogger
-  -> AI Hotspot Scan
-  -> Deep Topic Research
-  -> Weekly Jike Planning
-  -> Jike Automated Content Creation
-  -> Jike Reply Monitoring
-  -> Twitter/X Social Monitoring
-
-main
-  -> Daily Diary
-  -> Daily Knowledge Digest
-
-engineer
-  -> System Status Inspection
-
-evolution
-  -> Skill Discovery
-  -> Skill Trial Report
-  -> Skill Distribution
-```
-
-Two things were kept from production:
-
-- Real business node naming and routing logic
-- Fixed-thread, summary-reply, and retry behavior
-
-Two things were removed:
-
-- Real `chat_id`, `open_id`, secrets, and production paths
-- Internal environment coupling that should not be open-sourced
-
-## Project Structure
-
-```ascii
-openclaw-feishu-delivery
-├─ src/openclaw_feishu_cron_kit/
-│  ├─ core.py
-│  ├─ renderer.py
-│  └─ storage.py
-├─ scripts/
-│  ├─ send_message.py
-│  └─ process_retry_queue.py
-│  ├─ materialize_template_presentations.py
-│  └─ scaffold_agent_task.py
-├─ examples/
-│  ├─ feishu-templates.example.json
-│  ├─ jobs.example.json
-│  ├─ accounts.example.json
-│  └─ payloads/
-├─ state/
-├─ logs/
-├─ .env.example
-├─ pyproject.toml
-├─ README.md
-└─ README.en.md
-```
-
-## Config-First Runtime Model
-
-The runtime model is now intentionally configuration-driven:
-
-```ascii
-template config
-  -> route.transport.provider   # feishu / telegram / discord
-  -> route.delivery.channel     # direct / message / topic
-  -> presentation.schema        # 1.0 / 2.0
-  -> presentation.structure     # generic / collapsible-list / grouped-panels / panel-report
-  -> presentation.styles        # panel style tokens
-  -> presentation.blocks        # how the message is assembled
-  -> required_fields            # minimum payload contract
-
-scripts
-  -> read config
-  -> validate payload
-  -> render from blocks
-  -> dispatch by provider
-```
-
-Runtime behavior should come from config, not from Python template-specific branches.
-
-Use functional structure families first, not scene-specific renderer names:
-
-```ascii
-structure families
-├─ generic
-├─ collapsible-list
-├─ grouped-panels
-└─ panel-report
-```
-
-## Migrate Old Renderers Into Config Blocks
-
-If you still have legacy templates with `renderer`, convert them once into `presentation.schema + structure + styles + blocks`:
-
-```bash
-python3 scripts/materialize_template_presentations.py \
-  --templates-file runtime/feishu-templates.local.json \
-  --write \
-  --drop-renderer
-```
-
-This migration script exists only to materialize config.  
-After that, runtime behavior is driven entirely by template config.
-
-## How It Works
-
-```ascii
-Successful path
-────────────────────────────────
-cron / agent / conversation
-  -> scripts/send_message.py --mode template
-  -> load template config
-  -> validate job_id
-  -> resolve route + thread
-  -> send full card
-  -> if topic channel
-       -> append summary reply
-
-
-Failure path
-────────────────────────────────
-first attempt
-  -> retryable failure
-       -> write state/feishu-retry-queue.json
-       -> retry after 5 minutes
-       -> retry again after 30 minutes
-       -> mark failed after the last attempt
-
-non-retryable failure
-  -> fail immediately
-  -> do not enter retry queue
-```
-
-## One-Command Task Scaffolding
-
-To add a new agent delivery task, scaffold template config, job spec, and example payload in one step:
-
-```bash
-python3 scripts/scaffold_agent_task.py \
-  --runtime-dir runtime \
-  --repo-path /root/.openclaw/projects/openclaw-feishu-delivery \
-  --template-name weekly-ops-report \
-  --template-description "Weekly Ops Report" \
-  --agent-id engineer \
-  --job-name "Weekly Ops Report" \
-  --job-description "Summarize core ops status into a fixed-thread report" \
-  --layout panel-report \
-  --channel topic \
-  --transport-provider feishu \
-  --transport-account engineer \
-  --target-id oc_xxx \
-  --binding-key engineer:weekly-ops-report \
-  --thread-title "【Weekly Ops Report】" \
-  --cron "0 10 * * 1"
-```
-
-The scaffold writes:
-
-- a template entry into `runtime/feishu-templates.local.json`
-- a job spec into `runtime/jobs-spec.local.json`
-- an example payload into `runtime/payloads/`
-
-Preferred layout names:
-
-- `generic`
-- `collapsible-list`
-- `grouped-panels`
-- `panel-report`
-- `distribution-summary`
-
-Old names like `knowledge-digest`, `diagnosis-report`, and `daily-diary` remain as compatibility aliases.
-
-## Prompt for Xiaolongxia OpenClaw
-
-If you want Xiaolongxia OpenClaw to install and wire this tool for you, copy the prompt below and send it directly to your OpenClaw agent:
-
-```text
-Please read https://github.com/mileson/openclaw-feishu-delivery , especially README, examples/feishu-templates.example.json, examples/jobs.example.json, examples/accounts.example.json, and the files under examples/payloads/. First summarize how this Feishu fixed-thread delivery system works, including how templates determine routes, how job_id and binding_key determine fixed threads, how full cards and summary replies are layered, how retries work, and why the same person may have different open_id values across different agent apps.
-
-Then inspect the current OpenClaw system and report how many agents exist, who they are, what each one is responsible for, and which agents should be connected to this Feishu delivery foundation. Based on the actual agents in the system, generate an agent-by-agent integration draft that explains which templates should be used, which group each template should go to, whether it should use a fixed thread, what the thread title should be, whether the summary reply should mention someone, and whether retry should be enabled.
-
-Next, install openclaw-feishu-delivery on the current OpenClaw server. Clone it into /root/.openclaw/vendor/openclaw-feishu-delivery, create a virtual environment, install dependencies, and copy examples into candidate production config files under config/. Do not overwrite existing production configuration. Generate candidate config files first.
-
-After that, create templates / jobs / accounts mapping drafts for each agent that should be connected. Then run verification: at least one scheduled-task delivery path and one normal conversation delivery path. Verify fixed-thread delivery, summary reply behavior, retry queue behavior, and whether mentions work under the current agent-specific open_id scope. If anything fails, classify the issue as configuration error, wrong job_id, wrong open_id scope, or retry not connected, and provide an actionable repair plan.
-
-During the whole process, first output your understanding summary, current agent inventory, installation result, diff list, candidate configuration table, and verification result. Do not overwrite old config and do not enable production scheduled jobs until I confirm.
-```
+<a id="readme-section-2"></a>
 
 ## Requirements
 
@@ -241,37 +30,7 @@ You will need:
 - A target `chat_id`
 - `open_id` values for anyone you want to mention in summary replies
 
-## Multi-Agent Advice
-
-This repository is especially useful in a multi-agent environment.
-
-```ascii
-Recommended mapping
-────────────────────────────────
-blogger agent
-  -> blogger Feishu app
-  -> blogger-specific chat_id / open_id scope
-
-main agent
-  -> main Feishu app
-  -> main-specific chat_id / open_id scope
-
-engineer agent
-  -> engineer Feishu app
-
-evolution agent
-  -> evolution Feishu app
-```
-
-Important rule:
-
-```ascii
-The same human recipient
-  under different Feishu apps
-    -> may have different open_id values
-```
-
-Do not assume the same `open_id` can be reused across every agent app.
+<a id="readme-section-3"></a>
 
 ## Quick Start
 
@@ -353,27 +112,7 @@ Examples:
 - [examples/payloads/skill-trial.example.json](examples/payloads/skill-trial.example.json)
 - [examples/payloads/jike-publish.example.json](examples/payloads/jike-publish.example.json)
 
-## Send Your First Template Message
-
-```bash
-python3 scripts/send_message.py \
-  --mode template \
-  --agent-id blogger \
-  --job-id blogger-ai-hotspot-hourly \
-  --jobs-file examples/jobs.example.json \
-  --templates-file examples/feishu-templates.example.json \
-  --template ai-hotspot \
-  --data "$(cat examples/payloads/ai-hotspot.example.json)"
-```
-
-Typical success output:
-
-```ascii
-📨 Route resolved: channel=topic target=chat_id:oc_xxx
-🧵 Fixed thread: key=blogger:ai-hotspot title=【AI 热点扫描】
-✅ Thread message sent
-✅ Thread summary reply sent
-```
+<a id="readme-section-4"></a>
 
 ## Retry Worker
 
@@ -414,6 +153,271 @@ OpenClaw jobs.json
   -> easy to confuse with agent execution slots
 ```
 
+<a id="readme-section-5"></a>
+
+## Config-First Runtime Model
+
+The runtime model is now intentionally configuration-driven:
+
+```ascii
+template config
+  -> route.transport.provider   # feishu / telegram / discord
+  -> route.delivery.channel     # direct / message / topic
+  -> presentation.schema        # 1.0 / 2.0
+  -> presentation.structure     # generic / collapsible-list / grouped-panels / panel-report
+  -> presentation.styles        # panel style tokens
+  -> presentation.blocks        # how the message is assembled
+  -> required_fields            # minimum payload contract
+
+scripts
+  -> read config
+  -> validate payload
+  -> render from blocks
+  -> dispatch by provider
+```
+
+Runtime behavior should come from config, not from Python template-specific branches.
+
+Use functional structure families first, not scene-specific renderer names:
+
+```ascii
+structure families
+├─ generic
+├─ collapsible-list
+├─ grouped-panels
+└─ panel-report
+```
+
+<a id="readme-section-6"></a>
+
+## Migrate Old Renderers Into Config Blocks
+
+If you still have legacy templates with `renderer`, convert them once into `presentation.schema + structure + styles + blocks`:
+
+```bash
+python3 scripts/materialize_template_presentations.py \
+  --templates-file runtime/feishu-templates.local.json \
+  --write \
+  --drop-renderer
+```
+
+This migration script exists only to materialize config.  
+After that, runtime behavior is driven entirely by template config.
+
+<a id="readme-section-7"></a>
+
+## Production-Oriented Examples
+
+The template and job names in this repository are intentionally kept close to real production usage rather than demo-style naming.
+
+```ascii
+blogger
+  -> AI Hotspot Scan
+  -> Deep Topic Research
+  -> Weekly Jike Planning
+  -> Jike Automated Content Creation
+  -> Jike Reply Monitoring
+  -> Twitter/X Social Monitoring
+
+main
+  -> Daily Diary
+  -> Daily Knowledge Digest
+
+engineer
+  -> System Status Inspection
+
+evolution
+  -> Skill Discovery
+  -> Skill Trial Report
+  -> Skill Distribution
+```
+
+Two things were kept from production:
+
+- Real business node naming and routing logic
+- Fixed-thread, summary-reply, and retry behavior
+
+Two things were removed:
+
+- Real `chat_id`, `open_id`, secrets, and production paths
+- Internal environment coupling that should not be open-sourced
+
+<a id="readme-section-8"></a>
+
+## How It Works
+
+```ascii
+Successful path
+────────────────────────────────
+cron / agent / conversation
+  -> scripts/send_message.py --mode template
+  -> load template config
+  -> validate job_id
+  -> resolve route + thread
+  -> send full card
+  -> if topic channel
+       -> append summary reply
+
+
+Failure path
+────────────────────────────────
+first attempt
+  -> retryable failure
+       -> write state/feishu-retry-queue.json
+       -> retry after 5 minutes
+       -> retry again after 30 minutes
+       -> mark failed after the last attempt
+
+non-retryable failure
+  -> fail immediately
+  -> do not enter retry queue
+```
+
+<a id="readme-section-9"></a>
+
+## One-Command Task Scaffolding
+
+To add a new agent delivery task, scaffold template config, job spec, and example payload in one step:
+
+```bash
+python3 scripts/scaffold_agent_task.py \
+  --runtime-dir runtime \
+  --repo-path /root/.openclaw/projects/openclaw-feishu-delivery \
+  --template-name weekly-ops-report \
+  --template-description "Weekly Ops Report" \
+  --agent-id engineer \
+  --job-name "Weekly Ops Report" \
+  --job-description "Summarize core ops status into a fixed-thread report" \
+  --layout panel-report \
+  --channel topic \
+  --transport-provider feishu \
+  --transport-account engineer \
+  --target-id oc_xxx \
+  --binding-key engineer:weekly-ops-report \
+  --thread-title "【Weekly Ops Report】" \
+  --cron "0 10 * * 1"
+```
+
+The scaffold writes:
+
+- a template entry into `runtime/feishu-templates.local.json`
+- a job spec into `runtime/jobs-spec.local.json`
+- an example payload into `runtime/payloads/`
+
+Preferred layout names:
+
+- `generic`
+- `collapsible-list`
+- `grouped-panels`
+- `panel-report`
+- `distribution-summary`
+
+Old names like `knowledge-digest`, `diagnosis-report`, and `daily-diary` remain as compatibility aliases.
+
+<a id="readme-section-10"></a>
+
+## Prompt for Xiaolongxia OpenClaw
+
+If you want Xiaolongxia OpenClaw to install and wire this tool for you, copy the prompt below and send it directly to your OpenClaw agent:
+
+```text
+Please read https://github.com/mileson/openclaw-feishu-delivery , especially README, examples/feishu-templates.example.json, examples/jobs.example.json, examples/accounts.example.json, and the files under examples/payloads/. First summarize how this Feishu fixed-thread delivery system works, including how templates determine routes, how job_id and binding_key determine fixed threads, how full cards and summary replies are layered, how retries work, and why the same person may have different open_id values across different agent apps.
+
+Then inspect the current OpenClaw system and report how many agents exist, who they are, what each one is responsible for, and which agents should be connected to this Feishu delivery foundation. Based on the actual agents in the system, generate an agent-by-agent integration draft that explains which templates should be used, which group each template should go to, whether it should use a fixed thread, what the thread title should be, whether the summary reply should mention someone, and whether retry should be enabled.
+
+Next, install openclaw-feishu-delivery on the current OpenClaw server. Clone it into /root/.openclaw/vendor/openclaw-feishu-delivery, create a virtual environment, install dependencies, and copy examples into candidate production config files under config/. Do not overwrite existing production configuration. Generate candidate config files first.
+
+After that, create templates / jobs / accounts mapping drafts for each agent that should be connected. Then run verification: at least one scheduled-task delivery path and one normal conversation delivery path. Verify fixed-thread delivery, summary reply behavior, retry queue behavior, and whether mentions work under the current agent-specific open_id scope. If anything fails, classify the issue as configuration error, wrong job_id, wrong open_id scope, or retry not connected, and provide an actionable repair plan.
+
+During the whole process, first output your understanding summary, current agent inventory, installation result, diff list, candidate configuration table, and verification result. Do not overwrite old config and do not enable production scheduled jobs until I confirm.
+```
+
+<a id="readme-section-11"></a>
+
+## What This Repository Is
+
+This repository packages a production-proven Feishu delivery workflow into a reusable open-source project. It is designed for OpenClaw-style multi-agent systems, but it can also be used by plain cron jobs or normal agent conversations.
+
+It focuses on four practical goals:
+
+- Send structured messages through templates
+- Keep the same class of reports inside the same fixed Feishu thread
+- Automatically append a summary reply after the full card
+- Retry failed deliveries instead of waiting for the next scheduled run
+
+```ascii
+What you get
+────────────────────────────────
+Agent / scheduled job / conversation
+  -> send a template message
+  -> route into a fixed Feishu thread
+  -> append a summary reply
+  -> enqueue retry on transient failure
+  -> retry after 5 minutes
+  -> retry again after 30 minutes
+  -> mark as failed only after the final attempt
+```
+
+<a id="readme-section-12"></a>
+
+## Multi-Agent Advice
+
+This repository is especially useful in a multi-agent environment.
+
+```ascii
+Recommended mapping
+────────────────────────────────
+blogger agent
+  -> blogger Feishu app
+  -> blogger-specific chat_id / open_id scope
+
+main agent
+  -> main Feishu app
+  -> main-specific chat_id / open_id scope
+
+engineer agent
+  -> engineer Feishu app
+
+evolution agent
+  -> evolution Feishu app
+```
+
+Important rule:
+
+```ascii
+The same human recipient
+  under different Feishu apps
+    -> may have different open_id values
+```
+
+Do not assume the same `open_id` can be reused across every agent app.
+
+<a id="readme-section-13"></a>
+
+## Send Your First Template Message
+
+```bash
+python3 scripts/send_message.py \
+  --mode template \
+  --agent-id blogger \
+  --job-id blogger-ai-hotspot-hourly \
+  --jobs-file examples/jobs.example.json \
+  --templates-file examples/feishu-templates.example.json \
+  --template ai-hotspot \
+  --data "$(cat examples/payloads/ai-hotspot.example.json)"
+```
+
+Typical success output:
+
+```ascii
+📨 Route resolved: channel=topic target=chat_id:oc_xxx
+🧵 Fixed thread: key=blogger:ai-hotspot title=【AI 热点扫描】
+✅ Thread message sent
+✅ Thread summary reply sent
+```
+
+<a id="readme-section-14"></a>
+
 ## Runtime Files
 
 ```ascii
@@ -427,6 +431,36 @@ logs/
   feishu-retry-audit.jsonl
 ```
 
+<a id="readme-section-15"></a>
+
+## Project Structure
+
+```ascii
+openclaw-feishu-delivery
+├─ src/openclaw_feishu_cron_kit/
+│  ├─ core.py
+│  ├─ renderer.py
+│  └─ storage.py
+├─ scripts/
+│  ├─ send_message.py
+│  └─ process_retry_queue.py
+│  ├─ materialize_template_presentations.py
+│  └─ scaffold_agent_task.py
+├─ examples/
+│  ├─ feishu-templates.example.json
+│  ├─ jobs.example.json
+│  ├─ accounts.example.json
+│  └─ payloads/
+├─ state/
+├─ logs/
+├─ .env.example
+├─ pyproject.toml
+├─ README.md
+└─ README.en.md
+```
+
+<a id="readme-section-16"></a>
+
 ## Security Notes
 
 This repository is sanitized:
@@ -437,6 +471,8 @@ This repository is sanitized:
 - No production-only absolute paths
 
 Replace all placeholders with your own values before use.
+
+<a id="readme-section-17"></a>
 
 ## License
 
