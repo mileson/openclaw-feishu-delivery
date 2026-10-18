@@ -4,44 +4,9 @@
 
 > 让 OpenClaw 把日报、巡检、内容发布和监控结果稳定发到飞书固定话题的消息投递项目。
 
-## 这是什么
+[功能亮点](#readme-section-1) · [适合谁](#readme-section-3) · [如果希望让“小龙虾 OpenClaw”安装这套工具，提示词如下](#readme-section-5) · [配置优先的运行模型](#readme-section-7) · [如何让补发机制生效](#readme-section-9) · [这是什么](#readme-section-10) · [文档导航](#readme-section-21)
 
-如果你正在做下面这类事情，这个项目就是给你准备的：
-
-- 让一个 Agent 或定时任务把结果发到飞书
-- 希望同一类报告始终沉淀在**同一个话题**里，而不是每次新开一条消息
-- 希望每次完整报告之后，再自动补一条**摘要 reply**
-- 希望飞书临时失败时，不要等到下一小时或明天才恢复，而是自动补发
-
-这个仓库不是“为了开源而发明一套新的通用框架”，而是把真实生产里已经跑顺的飞书投递主链路整理出来，方便你复用到自己的 OpenClaw、多 Agent 调度系统或 cron 环境里。
-
-```ascii
-你会得到的能力
-────────────────────────────────
-定时任务 / Agent
-  -> 发送模板消息
-  -> 自动落到固定话题
-  -> 自动补一条摘要 reply
-  -> 失败时自动进入补发队列
-  -> 5 分钟后第 2 次补发
-  -> 30 分钟后第 3 次补发
-  -> 第 3 次还失败才标记最终失败
-```
-
-## 文档导航
-
-如果你准备把这套项目作为团队里的消息投递底座，建议按下面顺序阅读：
-
-- [`docs/openclaw-runtime-workflow.md`](docs/openclaw-runtime-workflow.md)
-  - 看清 `runtime/feishu-templates.local.json`、`runtime/accounts.local.json`、`runtime/jobs-spec.local.json` 的职责边界
-- [`docs/template-contract.md`](docs/template-contract.md)
-  - 看清任务 prompt / 子脚本到底应该只提供什么 payload，哪些 route / topic / account 语义不该再写进任务
-- [`docs/presentation-schema.md`](docs/presentation-schema.md)
-  - 看清 `presentation.schema + structure + styles + blocks` 怎么表达卡片结构，而不是继续在脚本里写 renderer 语义
-- [`docs/migrate-from-legacy-openclaw.md`](docs/migrate-from-legacy-openclaw.md)
-  - 如果你之前已经有旧版 `workspace/docs`、旧 prompt、旧发送脚本，这里是迁移地图
-
-如果你的本地环境通过 onboarding automation / Skill 来接入新 agent，建议让 onboarding 入口去调用本项目脚本，而不是在仓库里再维护一套独立 onboarding 主流程。
+<a id="readme-section-1"></a>
 
 ## 功能亮点
 
@@ -54,43 +19,7 @@
 - 多 Agent 多账号可独立配置，适合实际生产中的多机器人模式
 - 所有示例配置都已脱敏，但模板名称和业务场景保持生产实际语义
 
-## 这些内容来自真实生产场景
-
-这个仓库里的模板名称和任务类型，不是为了开源特意虚构的，而是来自真实生产里长期使用的 Agent 流水线节点，例如：
-
-```ascii
-内容侧（blogger）
-  -> AI 热点扫描
-  -> 深度选题研究
-  -> 周度即刻选题计划
-  -> 即刻 - 自动化内容创作
-  -> 即刻评论回复监控
-  -> Twitter/X 社媒监控
-
-总管侧（main）
-  -> 每日日记汇总
-  -> 每日知识整理
-
-工程侧（engineer）
-  -> 系统状态巡检
-
-进化侧（evolution）
-  -> 高质量 Skill 挖掘
-  -> Skill 试用评估报告
-  -> Skill 智能分发
-```
-
-这里做了两层取舍：
-
-- 保留真实业务节点名称、固定话题思路、补发机制和多 Agent 路由方式
-- 去掉真实群 ID、open_id、App 凭证、生产路径和内部耦合实现
-
-## 适合谁
-
-- 正在用 OpenClaw 或类似多 Agent 系统的人
-- 想把 Python 脚本、cron、GitHub Actions 结果推送到飞书的人
-- 想做“固定话题沉淀 + 自动摘要 + 自动重试”的人
-- 不想一上来就接复杂框架、只想先跑通的人
+<a id="readme-section-2"></a>
 
 ## 它解决的不是“发一条消息”，而是“稳定投递一类业务结果”
 
@@ -118,235 +47,26 @@
 
 也就是说，这个仓库更像一套“飞书结果投递底座”，而不是一个单独的消息脚本。
 
-## 项目结构
+<a id="readme-section-3"></a>
 
-```ascii
-openclaw-feishu-delivery
-├─ src/openclaw_feishu_cron_kit/
-│  ├─ core.py              # 核心逻辑：模板发送、固定话题、补发队列
-│  ├─ renderer.py          # 卡片和摘要渲染
-│  └─ storage.py           # JSON / JSONL 持久化
-├─ scripts/
-│  ├─ send_message.py      # 主 CLI 入口
-│  └─ process_retry_queue.py
-│  ├─ materialize_template_presentations.py
-│  └─ scaffold_agent_task.py
-├─ examples/
-│  ├─ feishu-templates.example.json
-│  ├─ jobs.example.json
-│  ├─ accounts.example.json
-│  └─ payloads/            # 生产场景脱敏样例
-├─ state/                  # 本地运行时状态（默认不提交）
-├─ logs/                   # 本地审计日志（默认不提交）
-├─ .env.example
-├─ pyproject.toml
-└─ README.md
-```
+## 适合谁
 
-## 配置优先的运行模型
+- 正在用 OpenClaw 或类似多 Agent 系统的人
+- 想把 Python 脚本、cron、GitHub Actions 结果推送到飞书的人
+- 想做“固定话题沉淀 + 自动摘要 + 自动重试”的人
+- 不想一上来就接复杂框架、只想先跑通的人
 
-这套工具现在的运行期原则很简单：
+<a id="readme-section-4"></a>
 
-```ascii
-模板配置
-  -> route.transport.provider   # feishu / telegram / discord
-  -> route.delivery.channel     # direct / message / topic
-  -> presentation.schema        # 1.0 / 2.0
-  -> presentation.structure     # generic / collapsible-list / grouped-panels / panel-report
-  -> presentation.styles        # 面板样式、颜色、图标
-  -> presentation.blocks        # 卡片怎么拼
-  -> required_fields            # payload 最低字段要求
+## 适合二次开发的方向
 
-脚本
-  -> 读取模板配置
-  -> 校验 payload
-  -> 按 blocks 拼卡片
-  -> 按 provider 分发
-```
+- 增加更多模板 renderer
+- 接入更多消息类型
+- 第三次失败后自动发运维告警
+- 增加 Web UI
+- 增加失败队列清理工具
 
-也就是说，脚本本身不再承担“这个模板长什么样”的业务语义。  
-运行期真正决定消息内容的，是模板配置中的 `presentation.schema + structure + styles + blocks`。
-
-推荐优先按“功能型结构族”选模板，而不是先按业务场景命名渲染器：
-
-```ascii
-结构族
-├─ generic
-│  └─ 普通线性报告，适合状态、列表、简报
-├─ collapsible-list
-│  └─ 单卡片 + 多个折叠列表，适合知识整理、日报
-├─ grouped-panels
-│  └─ 按记录动态生成多个 panel，适合 agent 分组推荐
-└─ panel-report
-   └─ 摘要 + 发现 + 任务详情 panel，适合诊断/巡检
-```
-
-推荐的模板结构如下：
-
-```json
-{
-  "templates": {
-    "daily-knowledge": {
-      "description": "每日知识整理",
-      "header_template": "blue",
-      "required_fields": ["title", "summary", "report_date", "organized_at", "execution_steps", "timestamp", "thread_summary"],
-      "presentation": {
-        "schema": "2.0",
-        "structure": "collapsible-list",
-        "header_title_template": "📚 每日知识整理 · {report_date}",
-        "styles": {
-          "panels": {
-            "default": {
-              "title_color": "#333333",
-              "header_background_color": "grey",
-              "border_color": "grey"
-            }
-          }
-        },
-        "blocks": [
-          {"type": "plain_text", "template": "{summary}"},
-          {"type": "plain_text", "template": "{report_date} | {timestamp}"},
-          {"type": "divider"},
-          {
-            "type": "collapsible_panel",
-            "title": "✅ 执行步骤（{execution_steps_count}）",
-            "expanded": true,
-            "blocks": [
-              {
-                "type": "record_list",
-                "path": "execution_steps",
-                "title": "",
-                "show_title": false,
-                "title_template": "<font color='#1890FF'>• **{name}**</font>",
-                "lines": ["文件：`{file}`", "{detail}"]
-              }
-            ]
-          },
-          {
-            "type": "collapsible_panel",
-            "title": "💡 关键洞察（{insights_count}）",
-            "expanded": false,
-            "blocks": [
-              {
-                "type": "list",
-                "path": "insights",
-                "title": "",
-                "show_title": false,
-                "empty_text": "本轮没有新增洞察。"
-              }
-            ]
-          }
-        ]
-      },
-      "route": {
-        "transport": {"provider": "feishu", "account": "main"},
-        "target": {"id": "oc_xxx", "type": "chat_id"},
-        "delivery": {"channel": "topic"},
-        "policy": {"lock_target": true, "lock_delivery": true},
-        "thread": {
-          "enabled": true,
-          "binding_key_template": "main:daily-knowledge",
-          "title_template": "【每日知识整理】",
-          "summary_reply": {"enabled": true, "required": true, "channel": "text"}
-        }
-      }
-    }
-  }
-}
-```
-
-## 旧模板迁移为配置 blocks
-
-如果你手里还有旧的 `renderer` 模板，不需要再把渲染逻辑写回 Python。  
-直接把旧模板一次性 materialize 成 `presentation.schema + structure + styles + blocks` 即可：
-
-```bash
-python3 scripts/materialize_template_presentations.py \
-  --templates-file runtime/feishu-templates.local.json \
-  --write \
-  --drop-renderer
-```
-
-这个脚本只负责做一次迁移：
-
-- 根据已知模板类型生成标准结构族配置
-- 把旧的 `renderer` 字段移除
-- 让运行期只依赖配置，不再依赖模板名对应的 Python 逻辑
-
-## 工作原理
-
-```ascii
-发送成功路径
-────────────────────────────────
-cron / agent
-  -> scripts/send_message.py --mode template
-  -> 读取模板配置
-  -> 校验 job_id
-  -> 解析 route + thread
-  -> 发完整卡片
-  -> 如果是 topic
-       -> 自动补一条摘要 reply
-
-
-发送失败路径
-────────────────────────────────
-首次发送
-  -> 可重试错误
-       -> 写入 state/feishu-retry-queue.json
-       -> 5 分钟后补第 2 次
-       -> 再失败 30 分钟后补第 3 次
-       -> 再失败则标记最终失败
-
-不可重试错误
-  -> 直接失败
-  -> 不进入补发队列
-```
-
-## 一键新增 Agent 任务
-
-后续新增一个 Agent 的飞书定时任务，不建议手改多份 JSON。  
-直接用脚手架生成模板、任务定义和 payload 示例：
-
-```bash
-python3 scripts/scaffold_agent_task.py \
-  --runtime-dir runtime \
-  --repo-path /root/.openclaw/projects/openclaw-feishu-delivery \
-  --template-name weekly-ops-report \
-  --template-description "每周运维汇总" \
-  --agent-id engineer \
-  --job-name "每周运维汇总" \
-  --job-description "每周汇总核心运维状态并发送固定话题报告" \
-  --layout panel-report \
-  --channel topic \
-  --transport-provider feishu \
-  --transport-account engineer \
-  --target-id oc_xxx \
-  --binding-key engineer:weekly-ops-report \
-  --thread-title "【每周运维汇总】" \
-  --cron "0 10 * * 1"
-```
-
-脚手架会生成：
-
-- `runtime/feishu-templates.local.json` 中的新模板
-- `runtime/jobs-spec.local.json` 中的新任务定义
-- `runtime/payloads/<template>.example.json` 示例 payload
-
-推荐优先使用这些结构族名称：
-
-- `generic`
-- `collapsible-list`
-- `grouped-panels`
-- `panel-report`
-- `distribution-summary`
-
-旧名字如 `knowledge-digest`、`diagnosis-report`、`daily-diary` 仍保留为兼容别名。
-
-然后再同步到 OpenClaw：
-
-```bash
-python3 scripts/sync_openclaw_jobs.py --spec-file runtime/jobs-spec.local.json
-```
+<a id="readme-section-5"></a>
 
 ## 如果希望让“小龙虾 OpenClaw”安装这套工具，提示词如下
 
@@ -364,71 +84,7 @@ python3 scripts/sync_openclaw_jobs.py --spec-file runtime/jobs-spec.local.json
 整个过程中请先输出理解总结、当前 agent 盘点结果、安装结果、差异清单、待确认配置表和验证结果；不要直接覆盖旧配置，也不要直接启用生产定时任务。只有当验证通过后，再向我汇报最终可执行方案。
 ```
 
-## 运行前你要准备什么
-
-### 1. Python 3.10+
-
-推荐先确认版本：
-
-```bash
-python3 --version
-```
-
-### 2. 一个可用的飞书机器人
-
-你至少需要：
-
-- `app_id`
-- `app_secret`
-- 一个要发消息的目标 `chat_id`
-- 如果你想在摘要里 `@某人`，还需要这个人的 `open_id`
-
-### 2.1 如果你是多 Agent 模式
-
-这套机制非常适合多 Agent 多机器人生产环境。
-
-```ascii
-推荐结构
-────────────────────────────────
-blogger agent
-  -> blogger 飞书应用
-  -> blogger 自己的 chat_id / open_id 作用域
-
-main agent
-  -> main 飞书应用
-  -> main 自己的 chat_id / open_id 作用域
-
-engineer agent
-  -> engineer 飞书应用
-
-evolution agent
-  -> evolution 飞书应用
-```
-
-要注意一个很容易踩坑的事实：
-
-```ascii
-同一个接收人
-  在不同飞书应用下
-    -> open_id 可能不同
-```
-
-也就是说，如果你在 `blogger` 模板里能正确 `@超级峰`，不代表在 `evolution` 模板里也能直接复用同一个 `open_id`。
-
-推荐做法：
-
-- 每个 agent 对应自己的飞书应用账号
-- 每个模板在自己的 agent 作用域下单独配置 `mention_open_ids`
-- 不要跨 agent 复用同一个 `open_id` 占位值
-
-### 3. 一个目录用于保存状态和日志
-
-默认就是项目内的：
-
-- `state/`
-- `logs/`
-
-如果你要部署到服务器，可以用参数改掉。
+<a id="readme-section-6"></a>
 
 ## 快速开始
 
@@ -568,29 +224,141 @@ evolution
 }
 ```
 
-## 第一次发送一条模板消息
+<a id="readme-section-7"></a>
 
-推荐直接先发一条测试消息：
+## 配置优先的运行模型
 
-```bash
-python3 scripts/send_message.py \
-  --mode template \
-  --agent-id blogger \
-  --job-id blogger-ai-hotspot-hourly \
-  --jobs-file examples/jobs.example.json \
-  --templates-file examples/feishu-templates.example.json \
-  --template ai-hotspot \
-  --data "$(cat examples/payloads/ai-hotspot.example.json)"
-```
-
-如果发送成功，你会看到类似输出：
+这套工具现在的运行期原则很简单：
 
 ```ascii
-📨 路由解析：channel=topic target=chat_id:oc_xxx
-🧵 固定话题：key=blogger:ai-hotspot title=【AI 热点扫描】
-✅ 群话题消息发送成功
-✅ 群话题摘要回复发送成功
+模板配置
+  -> route.transport.provider   # feishu / telegram / discord
+  -> route.delivery.channel     # direct / message / topic
+  -> presentation.schema        # 1.0 / 2.0
+  -> presentation.structure     # generic / collapsible-list / grouped-panels / panel-report
+  -> presentation.styles        # 面板样式、颜色、图标
+  -> presentation.blocks        # 卡片怎么拼
+  -> required_fields            # payload 最低字段要求
+
+脚本
+  -> 读取模板配置
+  -> 校验 payload
+  -> 按 blocks 拼卡片
+  -> 按 provider 分发
 ```
+
+也就是说，脚本本身不再承担“这个模板长什么样”的业务语义。  
+运行期真正决定消息内容的，是模板配置中的 `presentation.schema + structure + styles + blocks`。
+
+推荐优先按“功能型结构族”选模板，而不是先按业务场景命名渲染器：
+
+```ascii
+结构族
+├─ generic
+│  └─ 普通线性报告，适合状态、列表、简报
+├─ collapsible-list
+│  └─ 单卡片 + 多个折叠列表，适合知识整理、日报
+├─ grouped-panels
+│  └─ 按记录动态生成多个 panel，适合 agent 分组推荐
+└─ panel-report
+   └─ 摘要 + 发现 + 任务详情 panel，适合诊断/巡检
+```
+
+推荐的模板结构如下：
+
+```json
+{
+  "templates": {
+    "daily-knowledge": {
+      "description": "每日知识整理",
+      "header_template": "blue",
+      "required_fields": ["title", "summary", "report_date", "organized_at", "execution_steps", "timestamp", "thread_summary"],
+      "presentation": {
+        "schema": "2.0",
+        "structure": "collapsible-list",
+        "header_title_template": "📚 每日知识整理 · {report_date}",
+        "styles": {
+          "panels": {
+            "default": {
+              "title_color": "#333333",
+              "header_background_color": "grey",
+              "border_color": "grey"
+            }
+          }
+        },
+        "blocks": [
+          {"type": "plain_text", "template": "{summary}"},
+          {"type": "plain_text", "template": "{report_date} | {timestamp}"},
+          {"type": "divider"},
+          {
+            "type": "collapsible_panel",
+            "title": "✅ 执行步骤（{execution_steps_count}）",
+            "expanded": true,
+            "blocks": [
+              {
+                "type": "record_list",
+                "path": "execution_steps",
+                "title": "",
+                "show_title": false,
+                "title_template": "<font color='#1890FF'>• **{name}**</font>",
+                "lines": ["文件：`{file}`", "{detail}"]
+              }
+            ]
+          },
+          {
+            "type": "collapsible_panel",
+            "title": "💡 关键洞察（{insights_count}）",
+            "expanded": false,
+            "blocks": [
+              {
+                "type": "list",
+                "path": "insights",
+                "title": "",
+                "show_title": false,
+                "empty_text": "本轮没有新增洞察。"
+              }
+            ]
+          }
+        ]
+      },
+      "route": {
+        "transport": {"provider": "feishu", "account": "main"},
+        "target": {"id": "oc_xxx", "type": "chat_id"},
+        "delivery": {"channel": "topic"},
+        "policy": {"lock_target": true, "lock_delivery": true},
+        "thread": {
+          "enabled": true,
+          "binding_key_template": "main:daily-knowledge",
+          "title_template": "【每日知识整理】",
+          "summary_reply": {"enabled": true, "required": true, "channel": "text"}
+        }
+      }
+    }
+  }
+}
+```
+
+<a id="readme-section-8"></a>
+
+## 旧模板迁移为配置 blocks
+
+如果你手里还有旧的 `renderer` 模板，不需要再把渲染逻辑写回 Python。  
+直接把旧模板一次性 materialize 成 `presentation.schema + structure + styles + blocks` 即可：
+
+```bash
+python3 scripts/materialize_template_presentations.py \
+  --templates-file runtime/feishu-templates.local.json \
+  --write \
+  --drop-renderer
+```
+
+这个脚本只负责做一次迁移：
+
+- 根据已知模板类型生成标准结构族配置
+- 把旧的 `renderer` 字段移除
+- 让运行期只依赖配置，不再依赖模板名对应的 Python 逻辑
+
+<a id="readme-section-9"></a>
 
 ## 如何让补发机制生效
 
@@ -635,6 +403,267 @@ OpenClaw jobs.json
   -> 容易和 agent 运行槽位混淆
 ```
 
+<a id="readme-section-10"></a>
+
+## 这是什么
+
+如果你正在做下面这类事情，这个项目就是给你准备的：
+
+- 让一个 Agent 或定时任务把结果发到飞书
+- 希望同一类报告始终沉淀在**同一个话题**里，而不是每次新开一条消息
+- 希望每次完整报告之后，再自动补一条**摘要 reply**
+- 希望飞书临时失败时，不要等到下一小时或明天才恢复，而是自动补发
+
+这个仓库不是“为了开源而发明一套新的通用框架”，而是把真实生产里已经跑顺的飞书投递主链路整理出来，方便你复用到自己的 OpenClaw、多 Agent 调度系统或 cron 环境里。
+
+```ascii
+你会得到的能力
+────────────────────────────────
+定时任务 / Agent
+  -> 发送模板消息
+  -> 自动落到固定话题
+  -> 自动补一条摘要 reply
+  -> 失败时自动进入补发队列
+  -> 5 分钟后第 2 次补发
+  -> 30 分钟后第 3 次补发
+  -> 第 3 次还失败才标记最终失败
+```
+
+<a id="readme-section-11"></a>
+
+## 这些内容来自真实生产场景
+
+这个仓库里的模板名称和任务类型，不是为了开源特意虚构的，而是来自真实生产里长期使用的 Agent 流水线节点，例如：
+
+```ascii
+内容侧（blogger）
+  -> AI 热点扫描
+  -> 深度选题研究
+  -> 周度即刻选题计划
+  -> 即刻 - 自动化内容创作
+  -> 即刻评论回复监控
+  -> Twitter/X 社媒监控
+
+总管侧（main）
+  -> 每日日记汇总
+  -> 每日知识整理
+
+工程侧（engineer）
+  -> 系统状态巡检
+
+进化侧（evolution）
+  -> 高质量 Skill 挖掘
+  -> Skill 试用评估报告
+  -> Skill 智能分发
+```
+
+这里做了两层取舍：
+
+- 保留真实业务节点名称、固定话题思路、补发机制和多 Agent 路由方式
+- 去掉真实群 ID、open_id、App 凭证、生产路径和内部耦合实现
+
+<a id="readme-section-12"></a>
+
+## 项目结构
+
+```ascii
+openclaw-feishu-delivery
+├─ src/openclaw_feishu_cron_kit/
+│  ├─ core.py              # 核心逻辑：模板发送、固定话题、补发队列
+│  ├─ renderer.py          # 卡片和摘要渲染
+│  └─ storage.py           # JSON / JSONL 持久化
+├─ scripts/
+│  ├─ send_message.py      # 主 CLI 入口
+│  └─ process_retry_queue.py
+│  ├─ materialize_template_presentations.py
+│  └─ scaffold_agent_task.py
+├─ examples/
+│  ├─ feishu-templates.example.json
+│  ├─ jobs.example.json
+│  ├─ accounts.example.json
+│  └─ payloads/            # 生产场景脱敏样例
+├─ state/                  # 本地运行时状态（默认不提交）
+├─ logs/                   # 本地审计日志（默认不提交）
+├─ .env.example
+├─ pyproject.toml
+└─ README.md
+```
+
+<a id="readme-section-13"></a>
+
+## 工作原理
+
+```ascii
+发送成功路径
+────────────────────────────────
+cron / agent
+  -> scripts/send_message.py --mode template
+  -> 读取模板配置
+  -> 校验 job_id
+  -> 解析 route + thread
+  -> 发完整卡片
+  -> 如果是 topic
+       -> 自动补一条摘要 reply
+
+
+发送失败路径
+────────────────────────────────
+首次发送
+  -> 可重试错误
+       -> 写入 state/feishu-retry-queue.json
+       -> 5 分钟后补第 2 次
+       -> 再失败 30 分钟后补第 3 次
+       -> 再失败则标记最终失败
+
+不可重试错误
+  -> 直接失败
+  -> 不进入补发队列
+```
+
+<a id="readme-section-14"></a>
+
+## 一键新增 Agent 任务
+
+后续新增一个 Agent 的飞书定时任务，不建议手改多份 JSON。  
+直接用脚手架生成模板、任务定义和 payload 示例：
+
+```bash
+python3 scripts/scaffold_agent_task.py \
+  --runtime-dir runtime \
+  --repo-path /root/.openclaw/projects/openclaw-feishu-delivery \
+  --template-name weekly-ops-report \
+  --template-description "每周运维汇总" \
+  --agent-id engineer \
+  --job-name "每周运维汇总" \
+  --job-description "每周汇总核心运维状态并发送固定话题报告" \
+  --layout panel-report \
+  --channel topic \
+  --transport-provider feishu \
+  --transport-account engineer \
+  --target-id oc_xxx \
+  --binding-key engineer:weekly-ops-report \
+  --thread-title "【每周运维汇总】" \
+  --cron "0 10 * * 1"
+```
+
+脚手架会生成：
+
+- `runtime/feishu-templates.local.json` 中的新模板
+- `runtime/jobs-spec.local.json` 中的新任务定义
+- `runtime/payloads/<template>.example.json` 示例 payload
+
+推荐优先使用这些结构族名称：
+
+- `generic`
+- `collapsible-list`
+- `grouped-panels`
+- `panel-report`
+- `distribution-summary`
+
+旧名字如 `knowledge-digest`、`diagnosis-report`、`daily-diary` 仍保留为兼容别名。
+
+然后再同步到 OpenClaw：
+
+```bash
+python3 scripts/sync_openclaw_jobs.py --spec-file runtime/jobs-spec.local.json
+```
+
+<a id="readme-section-15"></a>
+
+## 运行前你要准备什么
+
+### 1. Python 3.10+
+
+推荐先确认版本：
+
+```bash
+python3 --version
+```
+
+### 2. 一个可用的飞书机器人
+
+你至少需要：
+
+- `app_id`
+- `app_secret`
+- 一个要发消息的目标 `chat_id`
+- 如果你想在摘要里 `@某人`，还需要这个人的 `open_id`
+
+### 2.1 如果你是多 Agent 模式
+
+这套机制非常适合多 Agent 多机器人生产环境。
+
+```ascii
+推荐结构
+────────────────────────────────
+blogger agent
+  -> blogger 飞书应用
+  -> blogger 自己的 chat_id / open_id 作用域
+
+main agent
+  -> main 飞书应用
+  -> main 自己的 chat_id / open_id 作用域
+
+engineer agent
+  -> engineer 飞书应用
+
+evolution agent
+  -> evolution 飞书应用
+```
+
+要注意一个很容易踩坑的事实：
+
+```ascii
+同一个接收人
+  在不同飞书应用下
+    -> open_id 可能不同
+```
+
+也就是说，如果你在 `blogger` 模板里能正确 `@超级峰`，不代表在 `evolution` 模板里也能直接复用同一个 `open_id`。
+
+推荐做法：
+
+- 每个 agent 对应自己的飞书应用账号
+- 每个模板在自己的 agent 作用域下单独配置 `mention_open_ids`
+- 不要跨 agent 复用同一个 `open_id` 占位值
+
+### 3. 一个目录用于保存状态和日志
+
+默认就是项目内的：
+
+- `state/`
+- `logs/`
+
+如果你要部署到服务器，可以用参数改掉。
+
+<a id="readme-section-16"></a>
+
+## 第一次发送一条模板消息
+
+推荐直接先发一条测试消息：
+
+```bash
+python3 scripts/send_message.py \
+  --mode template \
+  --agent-id blogger \
+  --job-id blogger-ai-hotspot-hourly \
+  --jobs-file examples/jobs.example.json \
+  --templates-file examples/feishu-templates.example.json \
+  --template ai-hotspot \
+  --data "$(cat examples/payloads/ai-hotspot.example.json)"
+```
+
+如果发送成功，你会看到类似输出：
+
+```ascii
+📨 路由解析：channel=topic target=chat_id:oc_xxx
+🧵 固定话题：key=blogger:ai-hotspot title=【AI 热点扫描】
+✅ 群话题消息发送成功
+✅ 群话题摘要回复发送成功
+```
+
+<a id="readme-section-17"></a>
+
 ## 固定话题是怎么工作的
 
 ```ascii
@@ -653,6 +682,8 @@ OpenClaw jobs.json
   -> reply 到同一个话题
   -> 不再新开话题
 ```
+
+<a id="readme-section-18"></a>
 
 ## 生产环境里推荐怎么组织多 Agent
 
@@ -698,6 +729,8 @@ payloads/
 5. payload 只负责传业务数据
 ```
 
+<a id="readme-section-19"></a>
+
 ## 哪些错误会自动补发
 
 会补发：
@@ -716,6 +749,8 @@ payloads/
 - `delivery.channel` 非法
 - 明显的参数错误
 
+<a id="readme-section-20"></a>
+
 ## 运行后会生成哪些文件
 
 ```ascii
@@ -728,6 +763,40 @@ logs/
   feishu-thread-audit.jsonl     # 线程审计
   feishu-retry-audit.jsonl      # 补发审计
 ```
+
+<a id="readme-section-21"></a>
+
+## 文档导航
+
+如果你准备把这套项目作为团队里的消息投递底座，建议按下面顺序阅读：
+
+- [`docs/openclaw-runtime-workflow.md`](docs/openclaw-runtime-workflow.md)
+  - 看清 `runtime/feishu-templates.local.json`、`runtime/accounts.local.json`、`runtime/jobs-spec.local.json` 的职责边界
+- [`docs/template-contract.md`](docs/template-contract.md)
+  - 看清任务 prompt / 子脚本到底应该只提供什么 payload，哪些 route / topic / account 语义不该再写进任务
+- [`docs/presentation-schema.md`](docs/presentation-schema.md)
+  - 看清 `presentation.schema + structure + styles + blocks` 怎么表达卡片结构，而不是继续在脚本里写 renderer 语义
+- [`docs/migrate-from-legacy-openclaw.md`](docs/migrate-from-legacy-openclaw.md)
+  - 如果你之前已经有旧版 `workspace/docs`、旧 prompt、旧发送脚本，这里是迁移地图
+
+如果你的本地环境通过 onboarding automation / Skill 来接入新 agent，建议让 onboarding 入口去调用本项目脚本，而不是在仓库里再维护一套独立 onboarding 主流程。
+
+<a id="readme-section-22"></a>
+
+## 仓库导航
+
+| 入口 | 内容 |
+| --- | --- |
+| [`docs/`](docs/) | 项目说明与参考文档 |
+| [`examples/`](examples/) | 可参考的输入与调用示例 |
+| [`pyproject.toml`](pyproject.toml) | Python 包与工具配置 |
+| [`runtime/`](runtime/) | 运行时实现 |
+| [`scripts/`](scripts/) | 开发与维护脚本 |
+| [`skills/`](skills/) | Agent 技能模块 |
+| [`src/`](src/) | 应用或服务实现 |
+| [`tests/`](tests/) | 自动化测试 |
+
+<a id="readme-section-23"></a>
 
 ## 常见问题
 
@@ -756,6 +825,8 @@ logs/
 - `state/feishu-retry-queue.json` 里有没有 pending 记录
 - 这次错误是不是不可重试错误
 
+<a id="readme-section-24"></a>
+
 ## 安全说明
 
 这个仓库已经做了脱敏处理：
@@ -777,13 +848,7 @@ logs/
 - `state/` 和 `logs/` 不要提交
 - 不要把真实群 ID 和用户 ID 写进 README
 
-## 适合二次开发的方向
-
-- 增加更多模板 renderer
-- 接入更多消息类型
-- 第三次失败后自动发运维告警
-- 增加 Web UI
-- 增加失败队列清理工具
+<a id="readme-section-25"></a>
 
 ## License
 
