@@ -1,12 +1,31 @@
-# OpenClaw 飞书消息发送
+<a id="openclaw-飞书消息发送"></a>
+
+<div align="center">
+
+# OpenClaw · 飞书业务结果投递
+
+**把日报、巡检与监控结果持续投递到固定飞书话题。**
+
+固定话题 · 模板消息 · 配置化投递 · 失败补发
+
+[![中文说明](https://img.shields.io/badge/%E8%AF%B4%E6%98%8E-%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-059669)](#readme-detail-28)
+[![项目类型](https://img.shields.io/badge/%E9%A1%B9%E7%9B%AE-%E6%9C%8D%E5%8A%A1-6366f1)](#readme-detail-28)
+
+[✨ 核心特性](#readme-detail-28) · [✅ 适合谁](#readme-detail-32) · [🚀 快速开始](#readme-detail-38) · [🧩 模块速查](#readme-detail-70) · [🔒 安全说明](#readme-detail-74) · [✅ 适合二次开发的方向](#readme-detail-34)
+
+</div>
+
+---
 
 > 让 OpenClaw 把日报、巡检、内容发布和监控结果稳定发到飞书固定话题的消息投递项目。
 
-[功能亮点](#readme-section-1) · [适合谁](#readme-section-3) · [如果希望让“小龙虾 OpenClaw”安装这套工具，提示词如下](#readme-section-5) · [配置优先的运行模型](#readme-section-7) · [如何让补发机制生效](#readme-section-9) · [这是什么](#readme-section-10) · [文档导航](#readme-section-21)
-
 <a id="readme-section-1"></a>
 
-## 功能亮点
+<a id="功能亮点"></a>
+
+<a id="readme-detail-28"></a>
+
+## ✨ 核心特性
 
 - 支持 `template` / `text` / `retry-pending` 三种模式
 - 支持飞书群普通消息、群话题消息、私聊消息
@@ -17,9 +36,77 @@
 - 多 Agent 多账号可独立配置，适合实际生产中的多机器人模式
 - 所有示例配置都已脱敏，但模板名称和业务场景保持生产实际语义
 
+<a id="readme-section-3"></a>
+
+<a id="适合谁"></a>
+
+<a id="readme-detail-32"></a>
+
+## ✅ 适合谁
+
+- 正在用 OpenClaw 或类似多 Agent 系统的人
+- 想把 Python 脚本、cron、GitHub Actions 结果推送到飞书的人
+- 想做“固定话题沉淀 + 自动摘要 + 自动重试”的人
+- 不想一上来就接复杂框架、只想先跑通的人
+
+<a id="readme-section-4"></a>
+
+<a id="适合二次开发的方向"></a>
+
+<a id="readme-detail-34"></a>
+
+## ✅ 适合二次开发的方向
+
+- 增加更多模板 renderer
+- 接入更多消息类型
+- 第三次失败后自动发运维告警
+- 增加 Web UI
+- 增加失败队列清理工具
+
+<a id="readme-section-11"></a>
+
+<a id="这些内容来自真实生产场景"></a>
+
+<a id="readme-detail-48"></a>
+
+## ✅ 这些内容来自真实生产场景
+
+这个仓库里的模板名称和任务类型，不是为了开源特意虚构的，而是来自真实生产里长期使用的 Agent 流水线节点，例如：
+
+```ascii
+内容侧（blogger）
+  -> AI 热点扫描
+  -> 深度选题研究
+  -> 周度即刻选题计划
+  -> 即刻 - 自动化内容创作
+  -> 即刻评论回复监控
+  -> Twitter/X 社媒监控
+
+总管侧（main）
+  -> 每日日记汇总
+  -> 每日知识整理
+
+工程侧（engineer）
+  -> 系统状态巡检
+
+进化侧（evolution）
+  -> 高质量 Skill 挖掘
+  -> Skill 试用评估报告
+  -> Skill 智能分发
+```
+
+这里做了两层取舍：
+
+- 保留真实业务节点名称、固定话题思路、补发机制和多 Agent 路由方式
+- 去掉真实群 ID、open_id、App 凭证、生产路径和内部耦合实现
+
 <a id="readme-section-2"></a>
 
-## 它解决的不是“发一条消息”，而是“稳定投递一类业务结果”
+<a id="它解决的不是发一条消息而是稳定投递一类业务结果"></a>
+
+<a id="readme-detail-30"></a>
+
+## 🎯 稳定投递业务结果
 
 ```ascii
 常见业务结果
@@ -45,28 +132,15 @@
 
 也就是说，这个仓库更像一套“飞书结果投递底座”，而不是一个单独的消息脚本。
 
-<a id="readme-section-3"></a>
-
-## 适合谁
-
-- 正在用 OpenClaw 或类似多 Agent 系统的人
-- 想把 Python 脚本、cron、GitHub Actions 结果推送到飞书的人
-- 想做“固定话题沉淀 + 自动摘要 + 自动重试”的人
-- 不想一上来就接复杂框架、只想先跑通的人
-
-<a id="readme-section-4"></a>
-
-## 适合二次开发的方向
-
-- 增加更多模板 renderer
-- 接入更多消息类型
-- 第三次失败后自动发运维告警
-- 增加 Web UI
-- 增加失败队列清理工具
-
 <a id="readme-section-5"></a>
 
-## 如果希望让“小龙虾 OpenClaw”安装这套工具，提示词如下
+<a id="如果希望让小龙虾-openclaw安装这套工具提示词如下"></a>
+
+<a id="readme-detail-36"></a>
+
+## 🤖 让 OpenClaw 帮你安装
+
+从下面的现有入口开始，按顺序准备环境、配置并完成首次运行。
 
 ```text
 请将下面这段提示词发送给你的小龙虾 OpenClaw，它将自动学习这套工具、完成安装部署、按当前系统里的 agent 设计模板与配置，并在验证通过后再向你汇报结果。
@@ -84,7 +158,13 @@
 
 <a id="readme-section-6"></a>
 
-## 快速开始
+<a id="快速开始"></a>
+
+<a id="readme-detail-38"></a>
+
+## 🚀 快速开始
+
+从下面的现有入口开始，按顺序准备环境、配置并完成首次运行。
 
 ### 第一步：安装依赖
 
@@ -224,7 +304,11 @@ evolution
 
 <a id="readme-section-7"></a>
 
-## 配置优先的运行模型
+<a id="配置优先的运行模型"></a>
+
+<a id="readme-detail-40"></a>
+
+## ⚙️ 配置优先的运行模型
 
 这套工具现在的运行期原则很简单：
 
@@ -338,7 +422,11 @@ evolution
 
 <a id="readme-section-8"></a>
 
-## 旧模板迁移为配置 blocks
+<a id="旧模板迁移为配置-blocks"></a>
+
+<a id="readme-detail-42"></a>
+
+## ⚙️ 旧模板迁移为配置 blocks
 
 如果你手里还有旧的 `renderer` 模板，不需要再把渲染逻辑写回 Python。  
 直接把旧模板一次性 materialize 成 `presentation.schema + structure + styles + blocks` 即可：
@@ -358,7 +446,11 @@ python3 scripts/materialize_template_presentations.py \
 
 <a id="readme-section-9"></a>
 
-## 如何让补发机制生效
+<a id="如何让补发机制生效"></a>
+
+<a id="readme-detail-44"></a>
+
+## 📌 如何让补发机制生效
 
 你有两种跑法。
 
@@ -403,7 +495,11 @@ OpenClaw jobs.json
 
 <a id="readme-section-10"></a>
 
-## 这是什么
+<a id="这是什么"></a>
+
+<a id="readme-detail-46"></a>
+
+## 📌 这是什么
 
 如果你正在做下面这类事情，这个项目就是给你准备的：
 
@@ -427,42 +523,15 @@ OpenClaw jobs.json
   -> 第 3 次还失败才标记最终失败
 ```
 
-<a id="readme-section-11"></a>
-
-## 这些内容来自真实生产场景
-
-这个仓库里的模板名称和任务类型，不是为了开源特意虚构的，而是来自真实生产里长期使用的 Agent 流水线节点，例如：
-
-```ascii
-内容侧（blogger）
-  -> AI 热点扫描
-  -> 深度选题研究
-  -> 周度即刻选题计划
-  -> 即刻 - 自动化内容创作
-  -> 即刻评论回复监控
-  -> Twitter/X 社媒监控
-
-总管侧（main）
-  -> 每日日记汇总
-  -> 每日知识整理
-
-工程侧（engineer）
-  -> 系统状态巡检
-
-进化侧（evolution）
-  -> 高质量 Skill 挖掘
-  -> Skill 试用评估报告
-  -> Skill 智能分发
-```
-
-这里做了两层取舍：
-
-- 保留真实业务节点名称、固定话题思路、补发机制和多 Agent 路由方式
-- 去掉真实群 ID、open_id、App 凭证、生产路径和内部耦合实现
-
 <a id="readme-section-12"></a>
 
-## 项目结构
+<a id="项目结构"></a>
+
+<a id="readme-detail-50"></a>
+
+## 📁 项目结构
+
+下面按实现职责列出目录位置，便于把修改放回对应模块。
 
 ```ascii
 openclaw-feishu-delivery
@@ -489,7 +558,11 @@ openclaw-feishu-delivery
 
 <a id="readme-section-13"></a>
 
-## 工作原理
+<a id="工作原理"></a>
+
+<a id="readme-detail-52"></a>
+
+## 📌 工作原理
 
 ```ascii
 发送成功路径
@@ -520,7 +593,11 @@ cron / agent
 
 <a id="readme-section-14"></a>
 
-## 一键新增 Agent 任务
+<a id="一键新增-agent-任务"></a>
+
+<a id="readme-detail-54"></a>
+
+## 🤖 一键新增 Agent 任务
 
 后续新增一个 Agent 的飞书定时任务，不建议手改多份 JSON。  
 直接用脚手架生成模板、任务定义和 payload 示例：
@@ -568,7 +645,11 @@ python3 scripts/sync_openclaw_jobs.py --spec-file runtime/jobs-spec.local.json
 
 <a id="readme-section-15"></a>
 
-## 运行前你要准备什么
+<a id="运行前你要准备什么"></a>
+
+<a id="readme-detail-56"></a>
+
+## 📌 运行前你要准备什么
 
 ### 1. Python 3.10+
 
@@ -636,7 +717,11 @@ evolution agent
 
 <a id="readme-section-16"></a>
 
-## 第一次发送一条模板消息
+<a id="第一次发送一条模板消息"></a>
+
+<a id="readme-detail-58"></a>
+
+## 🚀 第一次发送一条模板消息
 
 推荐直接先发一条测试消息：
 
@@ -662,7 +747,11 @@ python3 scripts/send_message.py \
 
 <a id="readme-section-17"></a>
 
-## 固定话题是怎么工作的
+<a id="固定话题是怎么工作的"></a>
+
+<a id="readme-detail-60"></a>
+
+## 📌 固定话题是怎么工作的
 
 ```ascii
 第一次发送
@@ -683,7 +772,11 @@ python3 scripts/send_message.py \
 
 <a id="readme-section-18"></a>
 
-## 生产环境里推荐怎么组织多 Agent
+<a id="生产环境里推荐怎么组织多-agent"></a>
+
+<a id="readme-detail-62"></a>
+
+## ⚙️ 生产环境里推荐怎么组织多 Agent
 
 如果你准备把这套东西放回真实生产环境，建议按下面的结构组织：
 
@@ -729,7 +822,11 @@ payloads/
 
 <a id="readme-section-19"></a>
 
-## 哪些错误会自动补发
+<a id="哪些错误会自动补发"></a>
+
+<a id="readme-detail-64"></a>
+
+## 📌 哪些错误会自动补发
 
 会补发：
 
@@ -749,7 +846,11 @@ payloads/
 
 <a id="readme-section-20"></a>
 
-## 运行后会生成哪些文件
+<a id="运行后会生成哪些文件"></a>
+
+<a id="readme-detail-66"></a>
+
+## 📁 运行后会生成哪些文件
 
 ```ascii
 state/
@@ -764,7 +865,11 @@ logs/
 
 <a id="readme-section-21"></a>
 
-## 文档导航
+<a id="文档导航"></a>
+
+<a id="readme-detail-68"></a>
+
+## 📚 文档导航
 
 如果你准备把这套项目作为团队里的消息投递底座，建议按下面顺序阅读：
 
@@ -781,22 +886,32 @@ logs/
 
 <a id="readme-section-22"></a>
 
-## 仓库导航
+<a id="仓库导航"></a>
 
-| 入口 | 内容 |
-| --- | --- |
-| [`docs/`](docs/) | 项目说明与参考文档 |
-| [`examples/`](examples/) | 可参考的输入与调用示例 |
-| [`pyproject.toml`](pyproject.toml) | Python 包与工具配置 |
-| [`runtime/`](runtime/) | 运行时实现 |
-| [`scripts/`](scripts/) | 开发与维护脚本 |
-| [`skills/`](skills/) | Agent 技能模块 |
-| [`src/`](src/) | 应用或服务实现 |
-| [`tests/`](tests/) | 自动化测试 |
+<a id="readme-detail-70"></a>
+
+## 🧩 模块速查
+
+按要处理的工作选择入口，先看模块职责，再进入对应文件或目录。
+
+| 模块入口 | 负责什么 | 什么时候看 |
+| --- | --- | --- |
+| [`docs/`](docs/) | 项目说明与参考文档 | 查阅运行、设计与维护约定 |
+| [`examples/`](examples/) | 可参考的输入与调用示例 | 用现有样例核对输入格式和调用方式 |
+| [`pyproject.toml`](pyproject.toml) | Python 包与工具配置 | 核对依赖、工程目标与现有命令 |
+| [`runtime/`](runtime/) | 运行时实现 | 按当前职责查阅实现及目录内说明 |
+| [`scripts/`](scripts/) | 开发与维护脚本 | 查找构建、验证或维护的现有命令 |
+| [`skills/`](skills/) | Agent 技能模块 | 查找具体场景对应的技能入口 |
+| [`src/`](src/) | 应用或服务实现 | 定位应用界面与业务实现 |
+| [`tests/`](tests/) | 自动化测试 | 为修改选择对应的回归检查 |
 
 <a id="readme-section-23"></a>
 
-## 常见问题
+<a id="常见问题"></a>
+
+<a id="readme-detail-72"></a>
+
+## ❓ 常见问题
 
 ### 1. 为什么我发消息后新开了一个话题？
 
@@ -825,7 +940,11 @@ logs/
 
 <a id="readme-section-24"></a>
 
-## 安全说明
+<a id="安全说明"></a>
+
+<a id="readme-detail-74"></a>
+
+## 🔒 安全说明
 
 这个仓库已经做了脱敏处理：
 
@@ -850,6 +969,10 @@ logs/
 
 <a id="license"></a>
 
-## 许可证
+<a id="许可证"></a>
+
+<a id="readme-detail-76"></a>
+
+## 📄 许可证
 
 MIT
